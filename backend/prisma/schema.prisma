@@ -1,0 +1,58 @@
+// server/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"  // <--- Fixed: Added closing quote
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   // "TEACHER" or "STUDENT"
+  createdAt DateTime @default(now())
+  
+  exams       Exam[]        
+  submissions Submission[]  
+}
+
+model Exam {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  duration    Int      
+  totalMarks  Int
+  teacherId   Int
+  teacher     User     @relation(fields: [teacherId], references: [id])
+  
+  questions   Question[]
+  submissions Submission[]
+}
+
+model Question {
+  id            Int    @id @default(autoincrement())
+  text          String
+  options       Json   
+  correctOption Int    
+  marks         Int    @default(1)
+  examId        Int
+  exam          Exam   @relation(fields: [examId], references: [id])
+}
+
+model Submission {
+  id              Int      @id @default(autoincrement())
+  studentId       Int
+  examId          Int
+  score           Int
+  tabSwitchCount  Int      @default(0) 
+  completedAt     DateTime @default(now())
+  
+  // Fixed: Changed 'reference' to 'references' and 'fieldsL' to 'fields'
+  student User @relation(fields: [studentId], references: [id])
+  exam    Exam @relation(fields: [examId], references: [id])
+}
