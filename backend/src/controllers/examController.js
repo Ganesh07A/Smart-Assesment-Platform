@@ -53,3 +53,60 @@ exports.getTeacherExams = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch exams" });
   }
 };
+
+// get all exms for students 
+exports.getAllExams = async (req,res)=> {
+  try {
+    const exams = await prisma.exam.findMany({
+      orderBy: { id : "desc"},
+      include: {
+        teacher : {
+          select: { name : true}  // Show the teacher's name too
+        }
+      }
+    })
+
+    res.json(exams)
+  }catch (err) {
+    res.status(500).json({error: "Failed to fetch Exams"})
+  } 
+}
+
+ // submit and calculate score 
+ // 4. Submit Exam & Calculate Score
+exports.submitExam = async (req, res) => {
+  try {
+    const { examId, answers } = req.body; // answers: { "55": 2, "56": 0 }
+    
+    // 1. Fetch all correct answers for this exam from DB
+    const questions = await prisma.question.findMany({
+      where: { examId: parseInt(examId) },
+    });
+
+    let score = 0;
+    let totalMarks = 0;
+
+    // 2. Loop through questions and compare
+    questions.forEach((q) => {
+      totalMarks += q.marks; // Track total possible marks
+
+      const userAnswer = answers[q.id]; // Get what user selected for this question ID
+
+      // If user answered AND it matches the correct option
+      if (userAnswer !== undefined && userAnswer === q.correctOption) {
+        score += q.marks;
+      }
+    });
+
+    // 3. Send result back
+    res.json({ 
+      score, 
+      totalMarks, 
+      percentage: ((score / totalMarks) * 100).toFixed(2) 
+    });
+
+  } catch (err) {
+    console.error("Submit Error:", err);
+    res.status(500).json({ error: "Failed to submit exam" });
+  }
+};

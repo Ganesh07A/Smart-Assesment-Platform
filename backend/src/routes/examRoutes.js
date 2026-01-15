@@ -5,5 +5,8 @@ const { authenticateToken } = require("../middleware/authMiddleware")
 
 router.post("/create", authenticateToken, examcontroller.createExam)
 router.get("/my-exams",authenticateToken ,examcontroller.getTeacherExams)
+router.get("/all",authenticateToken, examcontroller.getAllExams  )
+router.post("/submit",authenticateToken, examcontroller.submitExam  )
+
 
 module.exports = router
