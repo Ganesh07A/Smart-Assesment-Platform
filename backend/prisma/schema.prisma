@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"  // <--- Fixed: Added closing quote
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -16,9 +16,9 @@ model User {
   password  String
   role      String   // "TEACHER" or "STUDENT"
   createdAt DateTime @default(now())
-  
-  exams       Exam[]        
-  submissions Submission[]  
+   
+  exams       Exam[]         
+  submissions Submission[]   
 }
 
 model Exam {
@@ -29,7 +29,7 @@ model Exam {
   totalMarks  Int
   teacherId   Int
   teacher     User     @relation(fields: [teacherId], references: [id])
-  
+   
   questions   Question[]
   submissions Submission[]
 }
@@ -45,14 +45,16 @@ model Question {
 }
 
 model Submission {
-  id              Int      @id @default(autoincrement())
-  studentId       Int
-  examId          Int
-  score           Int
-  tabSwitchCount  Int      @default(0) 
-  completedAt     DateTime @default(now())
-  
-  // Fixed: Changed 'reference' to 'references' and 'fieldsL' to 'fields'
+  id             Int      @id @default(autoincrement())
+  studentId      Int
+  examId         Int
+  score          Int
+  totalScore     Int      @default(0) // <--- Added this field!
+  tabSwitchCount Int      @default(0) 
+  completedAt    DateTime @default(now())
+   
   student User @relation(fields: [studentId], references: [id])
   exam    Exam @relation(fields: [examId], references: [id])
 }
+
+// Deleted "model Result" because "model Submission" does the same job!
