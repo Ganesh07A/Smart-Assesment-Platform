@@ -5,10 +5,13 @@ import CreateExam from "./pages/CreateExam";
 import StudentDashboard from "./pages/StudentDashboard";
 import ExamView from "./pages/ExamView";
 import Register from "./pages/Register";
+import StudentResult from "./pages/StudentResult";
+import { Toaster } from "react-hot-toast"
 
 export default function App() {
   return (
     <BrowserRouter>
+    <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -16,7 +19,9 @@ export default function App() {
         <Route path="/create-exam" element={<CreateExam />} />
         <Route path="/student-dashboard" element={<StudentDashboard/>} />
         <Route path="/take-exam/:examId" element={<ExamView/>} />
+        <Route path="/student/result" element={<StudentResult/>} />
       </Routes>
+      <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
     </BrowserRouter>
   );
 }

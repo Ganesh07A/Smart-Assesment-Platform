@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import Navbar from "../components/Navbar";
+import toast from "react-hot-toast";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function Login() {
       localStorage.setItem("userRole", res.data.role);
       localStorage.setItem("userName", res.data.name);
 
-      alert(`Welcome back, ${res.data.name}!`);
+      toast.success(`Welcome back, ${res.data.name}!`);
 
       // Redirect based on role
       if (res.data.role === "TEACHER") {
@@ -35,7 +36,7 @@ export default function Login() {
         navigate("/student-dashboard");
       }
     } catch (err) {
-      alert(err.response?.data?.error || "Login Failed");
+      toast.error(err.response?.data?.error || "Login Failed");
     }
   };
 

@@ -5,7 +5,9 @@ import Navbar from "../components/Navbar";
 
 export default function StudentDashboard() {
   const [exams, setExams] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const userName = localStorage.getItem("userName") || "Student";
 
   useEffect(() => {
     const fetchExams = async () => {
@@ -15,59 +17,93 @@ export default function StudentDashboard() {
           headers: { Authorization: `Bearer ${token}` },
         });
         setExams(res.data);
+        setLoading(false);
       } catch (err) {
-        console.error("Error fetching exams:", err);
+        alert("Failed to fetch exams");
+        setLoading(false);
       }
     };
     fetchExams();
   }, []);
 
+  if (loading) return <div className="text-center mt-20 text-gray-500">Loading your dashboard...</div>;
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 font-sans">
       <Navbar />
       
-      <main className="max-w-6xl mx-auto mt-10 p-6">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Student Dashboard</h1>
-        <p className="text-gray-500 mb-8">Available exams for you to take.</p>
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        {/* Welcome Section */}
+        <div className="mb-10">
+            <h1 className="text-3xl font-bold text-gray-800">Welcome back, {userName}! 👋</h1>
+            <p className="text-gray-500 mt-2">Here are your assigned exams. Good luck!</p>
+        </div>
 
-        {exams.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
-            <p className="text-gray-400 text-lg">No active exams found.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {exams.map((exam) => (
-              <div key={exam.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">{exam.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">By {exam.teacher?.name || "Instructor"}</p>
-                  </div>
-                  <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">
-                    {exam.duration} Mins
-                  </span>
+        {/* Exam Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {exams.length === 0 ? (
+            <p className="text-gray-500">No exams available at the moment.</p>
+          ) : (
+            exams.map((exam) => (
+              <div 
+                key={exam.id} 
+                className={`relative bg-white p-6 rounded-2xl shadow-sm border transition-all hover:shadow-md ${exam.isAttempted ? "border-green-200 bg-green-50/30" : "border-gray-200"}`}
+              >
+                
+                {/* 🏷️ STATUS BADGE */}
+                <div className="absolute top-4 right-4">
+                    {exam.isAttempted ? (
+                        <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                            ✅ Completed
+                        </span>
+                    ) : (
+                        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                            ⏳ Pending
+                        </span>
+                    )}
+                </div>
+
+                {/* Exam Content */}
+                <div className="mb-4 pr-10"> {/* Padding right for badge */}
+                    <h3 className="text-xl font-bold text-gray-800 truncate" title={exam.title}>{exam.title}</h3>
+                    <p className="text-sm text-gray-500 mt-1">By: {exam.teacher?.name || "Unknown"}</p>
                 </div>
                 
-                <p className="text-gray-600 text-sm mb-6 line-clamp-2">
-                  {exam.description || "No description provided."}
+                <p className="text-gray-600 text-sm mb-6 line-clamp-2 h-10">
+                    {exam.description || "No description provided."}
                 </p>
 
-                <div className="flex items-center justify-between mt-auto">
-                  <span className="text-sm font-medium text-gray-500">
-                    Marks: {exam.totalMarks}
-                  </span>
-                  <button 
-                    onClick={() => navigate(`/take-exam/${exam.id}`)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
-                  >
-                    Start Exam
-                  </button>
+                {/* Stats Row */}
+                <div className="flex items-center gap-4 mb-6 text-sm text-gray-500">
+                    <div className="flex items-center gap-1">
+                        ⏱️ <span className="font-semibold">{exam.duration} mins</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        🏆 <span className="font-semibold">{exam.totalMarks} Marks</span>
+                    </div>
                 </div>
+
+                {/* Action Button */}
+                {exam.isAttempted ? (
+                    <button 
+                        disabled 
+                        className="w-full py-3 bg-gray-200 text-gray-500 font-bold rounded-xl cursor-not-allowed"
+                    >
+                        Score: {exam.score}/{exam.totalScore}
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => navigate(`/take-exam/${exam.id}`)}
+                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 transition-all active:scale-95"
+                    >
+                        Start Exam →
+                    </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </main>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

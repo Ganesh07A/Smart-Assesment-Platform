@@ -1,185 +1,245 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import Papa from "papaparse"; 
+import * as XLSX from "xlsx"; // <--- 1. Import Excel Library
 import Navbar from "../components/Navbar";
 
 export default function CreateExam() {
   const navigate = useNavigate();
   
-  // --- STATE MANAGEMENT ---
-  const [step, setStep] = useState(1); // 1 = Details, 2 = Upload
-  const [examId, setExamId] = useState(null);
-  const [file, setFile] = useState(null);
-  
-  const [formData, setFormData] = useState({
+  const [examData, setExamData] = useState({
     title: "",
     description: "",
-    duration: 60,
-    totalMarks: 100,
+    duration: 30,
   });
 
+  const [questions, setQuestions] = useState([
+    { text: "", options: ["", "", "", ""], correctOption: 0 },
+  ]);
+
   // --- HANDLERS ---
-  
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleExamChange = (e) => {
+    setExamData({ ...examData, [e.target.name]: e.target.value });
   };
 
-  // Function 1: Create the Exam (Metadata)
-  const handleCreateExam = async (e) => {
-    e.preventDefault();
+  const handleQuestionChange = (index, field, value) => {
+    const newQuestions = [...questions];
+    newQuestions[index][field] = value;
+    setQuestions(newQuestions);
+  };
+
+  const handleOptionChange = (qIndex, oIndex, value) => {
+    const newQuestions = [...questions];
+    newQuestions[qIndex].options[oIndex] = value;
+    setQuestions(newQuestions);
+  };
+
+  const addQuestion = () => {
+    setQuestions([...questions, { text: "", options: ["", "", "", ""], correctOption: 0 }]);
+  };
+
+  const removeQuestion = (index) => {
+    const newQuestions = questions.filter((_, i) => i !== index);
+    setQuestions(newQuestions);
+  };
+
+  // --- 🧠 SHARED IMPORT LOGIC (Works for CSV & Excel) ---
+  const processImportedData = (jsonData) => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        alert("You are not logged in!");
-        navigate("/");
+      const importedQuestions = jsonData.map((row) => {
+          // Normalize keys (trim spaces, handle case sensitivity if needed)
+          const qText = row["Question"] || row["question"];
+          const optA = row["Option A"] || row["option a"];
+          
+          if (!qText || !optA) return null;
+
+          // Map 'Option A', 'B', etc. to 0, 1, 2, 3
+          const correctMap = {
+              "Option A": 0, "Option B": 1, "Option C": 2, "Option D": 3,
+              "A": 0, "B": 1, "C": 2, "D": 3,
+ // Handles implicit string matching
+          };
+
+          return {
+            text: qText,
+            options: [
+              row["Option A"] || "", 
+              row["Option B"] || "", 
+              row["Option C"] || "", 
+              row["Option D"] || ""
+            ],
+            correctOption: correctMap[row["Correct Option"]] ?? 0
+          };
+      }).filter(q => q !== null);
+
+      if (importedQuestions.length === 0) {
+        toast.error("No valid questions found in file");
         return;
       }
 
-      const res = await axios.post("http://localhost:5000/api/exams/create", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // Success: Save ID and move to next step
-      setExamId(res.data.exam.id);
-      setStep(2);
-      alert("Exam Details Saved! Now upload questions.");
+      setQuestions((prev) => [...prev, ...importedQuestions]);
+      toast.success(`Loaded ${importedQuestions.length} questions!`);
     } catch (err) {
       console.error(err);
-      alert("Error: " + (err.response?.data?.error || err.message));
+      toast.error("Error processing file data");
     }
   };
 
-  // Function 2: Upload the Excel File
-  const handleUploadQuestions = async () => {
-    if (!file) return alert("Please select a file first!");
-    if (!examId) return alert("Error: No exam ID found. Please create exam first.");
+  // --- 📂 FILE UPLOAD HANDLER ---
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
+    const fileExtension = file.name.split(".").pop().toLowerCase();
+
+    // A. Handle CSV Files
+    if (fileExtension === "csv") {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => processImportedData(results.data),
+        error: () => toast.error("Failed to parse CSV"),
+      });
+    } 
+    // B. Handle Excel Files (.xlsx, .xls)
+    else if (fileExtension === "xlsx" || fileExtension === "xls") {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const bstr = evt.target.result;
+        const workbook = XLSX.read(bstr, { type: "binary" });
+        
+        // Grab first sheet
+        const wsname = workbook.SheetNames[0];
+        const ws = workbook.Sheets[wsname];
+        
+        // Convert to JSON
+        const data = XLSX.utils.sheet_to_json(ws);
+        processImportedData(data);
+      };
+      reader.readAsBinaryString(file);
+    } 
+    else {
+      toast.error("Invalid file type. Please upload CSV or Excel.");
+    }
+  };
+
+  // --- SUBMIT ---
+  const handleSubmit = async () => {
     try {
       const token = localStorage.getItem("token");
-      
-      // Create the Form Data envelope
-      const data = new FormData();
-      data.append("file", file);
-      data.append("examId", examId);
+      if (!examData.title || !examData.description) {
+         return toast.error("Please fill in exam details");
+      }
 
-      await axios.post("http://localhost:5000/api/questions/upload", data, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
+      await axios.post("http://localhost:5000/api/exams/create", {
+        ...examData,
+        questions
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert("Questions Uploaded Successfully!");
+      toast.success("Exam Created Successfully!");
       navigate("/teacher-dashboard");
     } catch (err) {
-      console.error(err);
-      alert("Upload Failed: " + (err.response?.data?.error || err.message));
+      toast.error("Failed to create exam");
     }
   };
 
-  // --- RENDER (JSX) ---
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 font-sans">
       <Navbar />
-      
-      <div className="max-w-2xl mx-auto mt-10 bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+      <div className="max-w-4xl mx-auto p-6">
         
-        {/* Progress Steps */}
-        <div className="flex items-center mb-8 text-sm font-medium text-gray-500">
-          <span className={step === 1 ? "text-blue-600 font-bold" : ""}>1. Exam Details</span>
-          <span className="mx-2">→</span>
-          <span className={step === 2 ? "text-blue-600 font-bold" : ""}>2. Upload Questions</span>
+        {/* Header */}
+        <div className="flex justify-between items-end mb-8">
+            <div>
+                <h1 className="text-3xl font-bold text-gray-800">Create New Exam</h1>
+                <p className="text-gray-500 mt-2">Set up details and add questions.</p>
+            </div>
+            
+            {/* 📤 UNIVERSAL UPLOAD BUTTON */}
+            <div className="relative">
+                <input 
+                    type="file" 
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <button className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-green-700 shadow-md flex items-center gap-2 transition active:scale-95">
+                    📊 Import CSV / Excel
+                </button>
+            </div>
         </div>
 
-        {/* STEP 1: Exam Form */}
-        {step === 1 && (
-          <form onSubmit={handleCreateExam} className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Create New Exam</h2>
-            
+        {/* Exam Details Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
-              <input 
-                type="text" 
-                name="title" 
-                required 
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-                onChange={handleChange} 
-                placeholder="e.g., Final Semester Exam"
-              />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Exam Title</label>
+                <input name="title" onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Mid-Term Physics" />
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea 
-                name="description" 
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-                onChange={handleChange} 
-                placeholder="Instructions..."
-              />
-            </div>
-
-             <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Mins)</label>
-                   <input 
-                     type="number" 
-                     name="duration" 
-                     defaultValue={60} 
-                     className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
-                     onChange={handleChange} 
-                   />
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Description</label>
+                    <input name="description" onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Chapters 1-3" />
                 </div>
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
-                   <input 
-                     type="number" 
-                     name="totalMarks" 
-                     defaultValue={100} 
-                     className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" 
-                     onChange={handleChange} 
-                   />
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Duration (Mins)</label>
+                    <input type="number" name="duration" value={examData.duration} onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-             </div>
-
-            <div className="flex justify-end">
-              <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors">
-                Save & Next
-              </button>
             </div>
-          </form>
-        )}
+        </div>
 
-        {/* STEP 2: File Upload */}
-        {step === 2 && (
-          <div className="space-y-6 text-center">
-            <h2 className="text-2xl font-bold text-gray-800">Upload Question Bank</h2>
-            <p className="text-gray-500">Upload the Excel (.xlsx) file containing your questions.</p>
-            
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-10 bg-gray-50 hover:bg-blue-50 transition-colors cursor-pointer relative">
-              <input 
-                type="file" 
-                accept=".xlsx, .xls"
-                onChange={(e) => setFile(e.target.files[0])}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="pointer-events-none">
-                <p className="text-blue-600 font-medium">
-                  {file ? file.name : "Click to select file"}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">Supported formats: .xlsx, .xls</p>
-              </div>
-            </div>
+        {/* Questions List */}
+        <div className="space-y-6">
+            {questions.map((q, qIndex) => (
+                <div key={qIndex} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group">
+                    <div className="absolute top-4 right-4">
+                        <button onClick={() => removeQuestion(qIndex)} className="text-gray-300 hover:text-red-500 transition">🗑️</button>
+                    </div>
+                    
+                    <h3 className="font-bold text-gray-400 text-sm mb-3 uppercase">Question {qIndex + 1}</h3>
+                    
+                    <input 
+                        value={q.text}
+                        onChange={(e) => handleQuestionChange(qIndex, "text", e.target.value)}
+                        className="w-full p-3 border rounded-lg mb-4 font-medium outline-none focus:border-blue-500" 
+                        placeholder="Enter question text here..."
+                    />
 
-            <div className="flex justify-end gap-4">
-              <button 
-                onClick={handleUploadQuestions} 
-                className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Upload & Finish
-              </button>
-            </div>
-          </div>
-        )}
+                    <div className="grid grid-cols-2 gap-4">
+                        {q.options.map((opt, oIndex) => (
+                            <div key={oIndex} className={`flex items-center gap-2 p-2 rounded-lg border ${q.correctOption === oIndex ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
+                                <input 
+                                    type="radio" 
+                                    name={`correct-${qIndex}`} 
+                                    checked={q.correctOption === oIndex}
+                                    onChange={() => handleQuestionChange(qIndex, "correctOption", oIndex)}
+                                    className="accent-green-600 w-5 h-5 cursor-pointer"
+                                />
+                                <input 
+                                    value={opt}
+                                    onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
+                                    className="w-full bg-transparent outline-none text-sm" 
+                                    placeholder={`Option ${oIndex + 1}`}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex gap-4 mt-8 pb-10">
+            <button onClick={addQuestion} className="flex-1 py-3 border-2 border-dashed border-gray-300 text-gray-500 font-bold rounded-xl hover:bg-gray-50 transition">
+                + Add Manually
+            </button>
+            <button onClick={handleSubmit} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition transform hover:-translate-y-1">
+                🚀 Publish Exam
+            </button>
+        </div>
 
       </div>
     </div>
