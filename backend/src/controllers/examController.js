@@ -257,3 +257,36 @@ exports.getExamReview = async (req, res) => {
     res.status(500).json({ error: "Failed to load review" });
   }
 };
+
+// Delete Exam (Teacher Only)
+exports.deleteExam = async (req, res) => {
+  try {
+    const examId = parseInt(req.params.examId);
+    const teacherId = req.user.userId;
+
+    // 1. Check if exam exists & belongs to this teacher
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { teacherId: true }
+    });
+
+    if (!exam) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    if (exam.teacherId !== teacherId) {
+      return res.status(403).json({ error: "Unauthorized action" });
+    }
+
+    // 2. DELETE EXAM (cascade will handle questions & submissions)
+    await prisma.exam.delete({
+      where: { id: examId }
+    });
+
+    res.json({ message: "Exam deleted successfully" });
+
+  } catch (err) {
+    console.error("Delete Exam Error:", err);
+    res.status(500).json({ error: "Failed to delete exam" });
+  }
+};

@@ -30,18 +30,18 @@ model Exam {
   teacherId   Int
   teacher     User     @relation(fields: [teacherId], references: [id])
    
-  questions   Question[]
-  submissions Submission[]
+  questions   Question[] 
+  submissions Submission[] 
 }
 
 model Question {
   id            Int    @id @default(autoincrement())
   text          String
-  options       Json   
+  options       String[]   
   correctOption Int    
   marks         Int    @default(1)
   examId        Int
-  exam          Exam   @relation(fields: [examId], references: [id])
+  exam          Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 model Submission {
@@ -55,7 +55,7 @@ model Submission {
   answers  Json?
    
   student User @relation(fields: [studentId], references: [id])
-  exam    Exam @relation(fields: [examId], references: [id])
+  exam    Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 // Deleted "model Result" because "model Submission" does the same job!

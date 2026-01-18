@@ -9,6 +9,7 @@ router.get("/all",authenticateToken, examcontroller.getAllExams  )
 router.post("/submit",authenticateToken, examcontroller.submitExam  )
 router.get("/teacher/stats", authenticateToken, examcontroller.getTeacherStats)
 router.get("/review/:examId", authenticateToken, examcontroller.getExamReview)
+router.delete("/:examId", authenticateToken, examcontroller.deleteExam);
 
 
 module.exports = router

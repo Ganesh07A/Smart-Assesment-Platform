@@ -2,8 +2,9 @@ const express = require("express")
 const cors = require("cors")
 require("dotenv").config()
 const authRoutes = require("./src/routes/authRoutes")
-const examRoutes = require("./src//routes/examRoutes")
+const examRoutes = require("./src/routes/examRoutes")
 const questionRoutes = require("./src/routes/questionRoutes")
+const analyticsRoutes = require("./src/routes/analyticsRoutes")
 const app = express()
 const PORT = process.env.PORT || 5000
 
@@ -13,6 +14,7 @@ app.use(express.json())  //Parses JSON from frontend
 app.use("/api/auth", authRoutes)
 app.use("/api/exams", examRoutes)
 app.use("/api/questions", questionRoutes)
+app.use("/api/analytics", analyticsRoutes)
 
 
 
