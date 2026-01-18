@@ -144,7 +144,8 @@ exports.submitExam = async (req, res) => {
         totalScore: totalScore,
         examId: parseInt(examId),
         studentId: studentId,
-        tabSwitchCount: tabSwitchCount || 0 
+        tabSwitchCount: tabSwitchCount || 0 ,
+        answers: answers
       }
     });
 
@@ -200,5 +201,59 @@ exports.getTeacherStats = async (req, res) => {
   } catch (err) {
     console.error("Dashboard Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+};
+
+// 6. Get Detailed Exam Report (For Student Review)
+// 6. Get Detailed Exam Report (For Student Review)
+exports.getExamReview = async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const studentId = req.user.userId;
+
+    // 1. Find submission
+    const submission = await prisma.submission.findFirst({
+      where: {
+        examId: parseInt(examId),
+        studentId: studentId
+      }
+    });
+
+    if (!submission) {
+      return res.status(404).json({ error: "Submission not found." });
+    }
+
+    // 2. Fetch questions
+    const questions = await prisma.question.findMany({
+      where: { examId: parseInt(examId) },
+      select: {
+        id: true,
+        text: true,
+        options: true,
+        correctOption: true
+      }
+    });
+
+    // 3. Attach selectedOption WITHOUT touching correctOption
+    const reviewData = questions.map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: q.options,
+      correctOption: q.correctOption,
+      selectedOption: submission.answers
+        ? submission.answers[q.id.toString()]
+        : null
+    }));
+
+    res.json({
+      examTitle: "Exam Review",
+      score: submission.score,
+      totalScore: submission.totalScore,
+      reviewData
+    });
+
+  } catch (err) {
+    console.error("Review Error:", err);
+    res.status(500).json({ error: "Failed to load review" });
   }
 };

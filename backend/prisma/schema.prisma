@@ -52,6 +52,7 @@ model Submission {
   totalScore     Int      @default(0) // <--- Added this field!
   tabSwitchCount Int      @default(0) 
   completedAt    DateTime @default(now())
+  answers  Json?
    
   student User @relation(fields: [studentId], references: [id])
   exam    Exam @relation(fields: [examId], references: [id])

@@ -6,6 +6,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import ExamView from "./pages/ExamView";
 import Register from "./pages/Register";
 import StudentResult from "./pages/StudentResult";
+import StudentReport from "./pages/StudentReport";
 import { Toaster } from "react-hot-toast"
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/student-dashboard" element={<StudentDashboard/>} />
         <Route path="/take-exam/:examId" element={<ExamView/>} />
         <Route path="/student/result" element={<StudentResult/>} />
+        <Route path="/exam/review/:examId" element={<StudentReport/>} />
       </Routes>
       <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
     </BrowserRouter>

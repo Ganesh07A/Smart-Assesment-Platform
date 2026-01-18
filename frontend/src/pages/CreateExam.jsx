@@ -46,41 +46,66 @@ export default function CreateExam() {
   };
 
   // --- 🧠 SHARED IMPORT LOGIC (Works for CSV & Excel) ---
+  // inside CreateExam.jsx
+
+  // --- 🧠 FIXED IMPORT LOGIC (Trims spaces & handles case sensitivity) ---
   const processImportedData = (jsonData) => {
     try {
+      let validCount = 0;
       const importedQuestions = jsonData.map((row) => {
-          // Normalize keys (trim spaces, handle case sensitivity if needed)
-          const qText = row["Question"] || row["question"];
-          const optA = row["Option A"] || row["option a"];
-          
+          // 1. Normalize Keys (Handle "question", "Question", "QUESTION")
+          const getVal = (key) => {
+             const foundKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
+             return foundKey ? row[foundKey] : null;
+          };
+
+          const qText = getVal("question");
+          const optA = getVal("option a");
+          const optB = getVal("option b");
+          const optC = getVal("option c");
+          const optD = getVal("option d");
+          const correctRaw = getVal("correct option"); // e.g., "Option B "
+
           if (!qText || !optA) return null;
 
-          // Map 'Option A', 'B', etc. to 0, 1, 2, 3
-          const correctMap = {
-              "Option A": 0, "Option B": 1, "Option C": 2, "Option D": 3,
-              "A": 0, "B": 1, "C": 2, "D": 3,
- // Handles implicit string matching
-          };
+          // 2. Clean the "Correct Option" string
+          // Removes spaces and makes it lowercase: " Option B " -> "option b"
+          const cleanCorrect = correctRaw ? correctRaw.toString().trim().toLowerCase() : "";
+
+          // 3. Precise Mapping
+          let correctIndex = 0; // Default
+          
+          if (cleanCorrect === "option a" || cleanCorrect === "a" || cleanCorrect === "1") correctIndex = 0;
+          else if (cleanCorrect === "option b" || cleanCorrect === "b" || cleanCorrect === "2") correctIndex = 1;
+          else if (cleanCorrect === "option c" || cleanCorrect === "c" || cleanCorrect === "3") correctIndex = 2;
+          else if (cleanCorrect === "option d" || cleanCorrect === "d" || cleanCorrect === "4") correctIndex = 3;
+          else {
+             // 🚨 Alert if the correct option is weird
+             console.warn(`Could not match correct option for: ${qText}. Defaulting to A.`);
+          }
+
+          validCount++;
 
           return {
             text: qText,
             options: [
-              row["Option A"] || "", 
-              row["Option B"] || "", 
-              row["Option C"] || "", 
-              row["Option D"] || ""
+              optA.toString(), 
+              optB ? optB.toString() : "", 
+              optC ? optC.toString() : "", 
+              optD ? optD.toString() : ""
             ],
-            correctOption: correctMap[row["Correct Option"]] ?? 0
+            correctOption: correctIndex
           };
       }).filter(q => q !== null);
 
       if (importedQuestions.length === 0) {
-        toast.error("No valid questions found in file");
+        toast.error("No valid questions found.");
         return;
       }
 
       setQuestions((prev) => [...prev, ...importedQuestions]);
-      toast.success(`Loaded ${importedQuestions.length} questions!`);
+      toast.success(`Loaded ${validCount} questions successfully!`);
+      
     } catch (err) {
       console.error(err);
       toast.error("Error processing file data");
