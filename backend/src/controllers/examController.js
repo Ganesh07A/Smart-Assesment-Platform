@@ -258,7 +258,7 @@ exports.getExamReview = async (req, res) => {
   }
 };
 
-// Delete Exam (Teacher Only)
+// 7. Delete Exam (Teacher Only)
 exports.deleteExam = async (req, res) => {
   try {
     const examId = parseInt(req.params.examId);
@@ -290,3 +290,166 @@ exports.deleteExam = async (req, res) => {
     res.status(500).json({ error: "Failed to delete exam" });
   }
 };
+
+// 8. Export Exam Results (Teacher)
+exports.getExamResults = async (req,res) => {
+  try {
+    const teacherId = req.user.userId
+    const examId = parseInt(req.params.examId)
+
+    if (isNaN(examId)) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    } 
+
+    // 1. validate teacher
+    const exam = await prisma.exam.findUnique({
+      where: {id: examId},
+      select: {teacherId: true, title: true, totalMarks: true }
+    })
+
+    if(!exam) {
+      return res.status(404).json({error: "Exam not Found !"})
+    }
+
+    if(exam.teacherId !== teacherId) {
+      return res.status(403).json({error: "Unauthorised !"})
+    }
+
+    // 2. fetch exam + submissions 
+    const submissions = await prisma.submission.findMany({
+      where: {examId},
+      include: {
+        student: {
+          select: {
+            name: true,
+            email: true,
+          }
+        }
+      }
+    })
+
+     // 3. Format export data
+     const results = submissions.map((sub)=> {
+      const percentage = Math.round(
+        (sub.score / sub.totalScore) * 100
+      )
+      return {
+        name: sub.student.name,
+        email: sub.student.email,
+        score: sub.score,
+        totalScore: sub.totalScore,
+         percentage,
+        result: percentage >= 35 ? "PASS" : "FAIL",
+        tabSwitchCount: sub.tabSwitchCount,
+      }
+
+    })
+    res.json({
+      examTitle: exam.title,
+      results,
+
+    })
+
+  }catch (err) {
+    console.error("Export Results Error:", err);
+    res.status(500).json({ error: "Failed to export results" });
+  }
+}
+
+// 9. Exam Details for Teacher (View Page)
+exports.getExamDetails = async (req, res) => {
+  try {
+    const examId = Number(req.params.examId);
+    const teacherId = req.user.userId;
+
+    // 1. Validate examId
+    if (isNaN(examId)) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    // 2. Check exam exists & belongs to teacher
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: {
+        id: true,
+        title: true,
+        totalMarks: true,
+        teacherId: true,
+      },
+    });
+
+    if (!exam) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    if (exam.teacherId !== teacherId) {
+      return res.status(403).json({ error: "Unauthorized access" });
+    }
+
+    // 3. Fetch submissions with student info
+    const submissions = await prisma.submission.findMany({
+      where: { examId },
+      include: {
+        student: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { completedAt: "desc" },
+    });
+
+    // 4. Compute analytics
+    const attempts = submissions.length;
+
+    const totalScoreSum = submissions.reduce(
+      (sum, s) => sum + s.score,
+      0
+    );
+
+    const avgScore =
+      attempts > 0 ? Number((totalScoreSum / attempts).toFixed(2)) : 0;
+
+    const passCount = submissions.filter(
+      (s) => s.totalScore > 0 && s.score / s.totalScore >= 0.35
+    ).length;
+
+    const passRate =
+      attempts > 0 ? Math.round((passCount / attempts) * 100) : 0;
+
+    // 5. Format student-wise data
+    const formattedSubmissions = submissions.map((s) => {
+      const percentage =
+        s.totalScore > 0
+          ? Math.round((s.score / s.totalScore) * 100)
+          : 0;
+
+      return {
+        studentName: s.student.name,
+        email: s.student.email,
+        score: s.score,
+        totalScore: s.totalScore,
+        percentage,
+        result: percentage >= 35 ? "PASS" : "FAIL",
+        tabSwitchCount: s.tabSwitchCount,
+        submittedAt: s.completedAt,
+      };
+    });
+
+    // 6. Final response
+    res.json({
+      exam: {
+        title: exam.title,
+        attempts,
+        avgScore,
+        passRate,
+      },
+      submissions: formattedSubmissions,
+    });
+  } catch (err) {
+    console.error("Exam Details Error:", err);
+    res.status(500).json({ error: "Failed to fetch exam details" });
+  }
+};
+
