@@ -4,6 +4,10 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
 import { TableSkeleton } from "../components/Skeleton";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import {
   BarChart,
@@ -34,11 +38,11 @@ export default function TeacherDashboard() {
   const [examAnalytics, setExamAnalytics] = useState([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [sortBy, setSortBy] = useState("attempts");
-
+  const [liveTracking, setLiveTracking ] = useState(false)
   const prevActivityRef = useRef([]);
 
   /* ============================
-      API CALLS
+      API CALLs
   ============================ */
 
   const fetchStats = async () => {
@@ -48,10 +52,15 @@ export default function TeacherDashboard() {
         "http://localhost:5000/api/exams/teacher/stats",
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       const newActivity = res.data.recentActivity || [];
+
+      // Activate live tracking on first submission
+      if (!liveTracking && newActivity.length > 0) {
+        setLiveTracking(true);
+      }
 
       // Prevent toast on first load
       if (prevActivityRef.current.length > 0 && newActivity.length > 0) {
@@ -61,7 +70,7 @@ export default function TeacherDashboard() {
         if (prevLatest !== newLatest) {
           const sub = newActivity[0];
           toast.success(
-            `🎉 ${sub.student.name} submitted "${sub.exam.title}" — ${sub.score}/${sub.totalScore}`
+            `🎉 ${sub.student.name} submitted "${sub.exam.title}" — ${sub.score}/${sub.totalScore}`,
           );
         }
       }
@@ -75,18 +84,19 @@ export default function TeacherDashboard() {
 
   const fetchExamAnalytics = async () => {
     try {
+      setLoadingAnalytics(true); // ✅ add this
       const token = localStorage.getItem("token");
       const res = await axios.get(
         "http://localhost:5000/api/analytics/teacher/exams",
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
       setExamAnalytics(res.data);
-      setLoadingAnalytics(false);
     } catch {
       toast.error("Failed to load exam analytics");
-      setLoadingAnalytics(false);
+    } finally {
+      setLoadingAnalytics(false); // ✅ safer
     }
   };
 
@@ -111,10 +121,128 @@ export default function TeacherDashboard() {
     }
   };
 
-  const exportResults = () => {
-    toast("Export feature coming next 🚀");
+  const exportResults = async (examId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `http://localhost:5000/api/exams/${examId}/results`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      const { examTitle, results } = res.data;
+
+      // Convert JSON to worksheet (DECLARE ONCE)
+      const worksheet = XLSX.utils.json_to_sheet(results);
+
+      const headerStyle = {
+        font: { bold: true },
+        alignment: { horizontal: "center" },
+        fill: {
+          fgColor: { rgb: "E3F2FD" }, // light blue
+        },
+      };
+
+      // Apply header style
+      const headers = Object.keys(results[0] || {});
+      headers.forEach((_, index) => {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: 0, c: index })];
+        if (cell) cell.s = headerStyle;
+      });
+
+      results.forEach((_, rowIndex) => {
+        [2, 3, 4, 6].forEach((colIndex) => {
+          const cell =
+            worksheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex })];
+          if (cell) {
+            cell.s = { alignment: { horizontal: "center" } };
+          }
+        });
+      });
+
+      // Auto column width
+      const cols = Object.keys(results[0] || {}).map(() => ({ wch: 20 }));
+      worksheet["!cols"] = cols;
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Results");
+
+      // Export file
+      const excelBuffer = XLSX.write(workbook, {
+        bookType: "xlsx",
+        type: "array",
+      });
+
+      const file = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      saveAs(file, `${examTitle}_Results.xlsx`);
+      toast.success("Excel exported successfully");
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error("Failed to export results");
+    }
   };
 
+  const exportResultsPDF = async (examId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `http://localhost:5000/api/exams/${examId}/results`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      const { examTitle, results } = res.data;
+
+      const doc = new jsPDF();
+
+      // Title
+      doc.setFontSize(16);
+      doc.text(`Exam Results: ${examTitle}`, 14, 15);
+
+      // Table
+      const tableColumn = [
+        "Name",
+        "Email",
+        "Score",
+        "Total",
+        "Percentage",
+        "Result",
+        "Tab Switches",
+      ];
+
+      const tableRows = results.map((r) => [
+        r.name,
+        r.email,
+        r.score,
+        r.totalScore,
+        `${r.percentage}%`,
+        r.result,
+        r.tabSwitchCount,
+      ]);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 25,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [41, 128, 185] },
+      });
+
+      doc.save(`${examTitle}_Results.pdf`);
+      toast.success("PDF exported successfully");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      toast.error("Failed to export PDF");
+    }
+  };
+
+  
   /* ============================
       EFFECTS
   ============================ */
@@ -122,10 +250,15 @@ export default function TeacherDashboard() {
   useEffect(() => {
     fetchStats();
     fetchExamAnalytics();
-
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
   }, []);
+
+  //Conditional live polling
+  useEffect(() => {
+  if (!liveTracking) return;
+
+  const interval = setInterval(fetchStats, 10000);
+  return () => clearInterval(interval);
+}, [liveTracking]);
 
   /* ============================
       SORTING & CHART DATA
@@ -203,10 +336,16 @@ export default function TeacherDashboard() {
               >
                 🔄 Refresh
               </button>
-              <button onClick={() => setSortBy("attempts")} className="underline">
+              <button
+                onClick={() => setSortBy("attempts")}
+                className="underline"
+              >
                 Sort by Attempts
               </button>
-              <button onClick={() => setSortBy("passRate")} className="underline">
+              <button
+                onClick={() => setSortBy("passRate")}
+                className="underline"
+              >
                 Sort by Pass %
               </button>
             </div>
@@ -248,8 +387,8 @@ export default function TeacherDashboard() {
                               exam.passRate >= 60
                                 ? "bg-green-100 text-green-700"
                                 : exam.passRate >= 35
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-red-100 text-red-700"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
                             }`}
                           >
                             {exam.passRate}%
@@ -267,9 +406,15 @@ export default function TeacherDashboard() {
                             </button>
                             <button
                               className="px-3 py-1 text-xs bg-green-50 text-green-700 rounded-lg"
-                              onClick={exportResults}
+                              onClick={() => exportResults(exam.examId)}
                             >
-                              Export
+                              Excel
+                            </button>
+                            <button
+                              className="px-3 py-1 text-xs bg-purple-50 text-purple-700 rounded-lg"
+                              onClick={() => exportResultsPDF(exam.examId)}
+                            >
+                              PDF
                             </button>
                             <button
                               className="px-3 py-1 text-xs bg-red-50 text-red-700 rounded-lg"
@@ -349,30 +494,42 @@ const StatCard = ({ title, value, icon }) => (
 
 const RecentActivity = ({ activity }) => (
   <div className="bg-white rounded-2xl shadow-sm border mt-10 overflow-hidden">
+    
+    {/* Header */}
     <div className="p-6 border-b">
       <h3 className="text-xl font-bold">Recent Activity</h3>
     </div>
 
-    {activity.length === 0 ? (
-      <div className="p-8 text-center text-gray-400">No activity yet.</div>
-    ) : (
-      activity.map((sub) => (
-        <div key={sub.id} className="p-6 flex justify-between hover:bg-gray-50">
-          <p>
-            <b>{sub.student.name}</b> submitted{" "}
-            <span className="text-blue-600">{sub.exam.title}</span>
-          </p>
-          <span
-            className={`font-bold ${
-              sub.score / sub.totalScore >= 0.35
-                ? "text-green-600"
-                : "text-red-600"
-            }`}
-          >
-            {sub.score}/{sub.totalScore}
-          </span>
+    {/* Scrollable body */}
+    <div className="max-h-[320px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-10">
+      {activity.length === 0 ? (
+        <div className="p-8 text-center text-gray-400">
+          🕒 Waiting for students to submit exams…
         </div>
-      ))
-    )}
+      ) : (
+        activity.map((sub) => (
+          <div
+            key={sub.id}
+            className="p-6 flex justify-between items-center border-b last:border-b-0 hover:bg-gray-50"
+          >
+            <p>
+              <b>{sub.student.name}</b> submitted{" "}
+              <span className="text-blue-600">{sub.exam.title}</span>
+            </p>
+
+            <span
+              className={`font-bold ${
+                sub.score / sub.totalScore >= 0.35
+                  ? "text-green-600"
+                  : "text-red-600"
+              }`}
+            >
+              {sub.score}/{sub.totalScore}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
   </div>
 );
+

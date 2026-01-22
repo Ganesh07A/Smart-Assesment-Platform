@@ -2,12 +2,13 @@ import { useNavigate } from "react-router-dom";
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userName = localStorage.getItem("userName");
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userRole");
+    window.location.href = "/login";
   };
 
   return (
@@ -21,7 +22,7 @@ export default function Navbar() {
 
       <div className="flex items-center gap-6">
         <span className="text-gray-600 font-medium">
-          Welcome, <span className="text-blue-600">{user.name || "Teacher"}</span>
+          Welcome, <span className="text-blue-600">{userName || "User"}</span>
         </span>
         <button
           onClick={handleLogout}
