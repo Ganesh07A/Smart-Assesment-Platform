@@ -4,34 +4,31 @@ const prisma = new PrismaClient();
 // 1. Create Exam
 exports.createExam = async (req, res) => {
   try {
-    // 1. Get questions array from the request
     const { title, description, duration, questions } = req.body;
 
-    // 2. Security Check
     if (!req.user || !req.user.userId) {
       return res.status(401).json({ error: "Unauthorized: User not found." });
     }
 
-    // 3. Auto-Calculate Total Marks (1 question = 1 mark)
-    // If no questions are sent, default to 0
     const calculatedTotalMarks = questions ? questions.length : 0;
 
-    // 4. Create Exam AND Questions in one go
     const newExam = await prisma.exam.create({
       data: {
         title,
         description,
         duration: parseInt(duration),
-        totalMarks: calculatedTotalMarks, // <--- Auto-calculated
+        totalMarks: calculatedTotalMarks, 
         teacher: { 
-            connect: { id: req.user.userId } // <--- Your auth fix
+            connect: { id: req.user.userId } 
         },
-        // 👇 CRITICAL: This saves the questions!
         questions: {
           create: questions.map((q) => ({
+            type: q.type || "MCQ",
             text: q.text,
-            options: q.options,
-            correctOption: parseInt(q.correctOption),
+            options: q.options || [],
+            correctOption: q.type === "MCQ" ? parseInt(q.correctOption) : null,
+            testCases: q.type === "CODE" ? q.testCases : [],
+            marks: parseInt(q.marks) || 1
           })),
         },
       },
@@ -44,10 +41,9 @@ exports.createExam = async (req, res) => {
   }
 };
 
-// 2. Get All Exams for the Logged-in Teacher
+// 2. Get Teacher Exams
 exports.getTeacherExams = async (req, res) => {
   try {
-    // 👇 FIXED: Use req.user.userId
     const exams = await prisma.exam.findMany({
       where: { teacherId: req.user.userId },
       orderBy: { id: "desc" },
@@ -58,14 +54,11 @@ exports.getTeacherExams = async (req, res) => {
   }
 };
 
-// 3. Get All Exams (For Students)
-// 3. Get All Exams (Smart Version: Checks for Attempts)
+// 3. Get All Exams (Smart Version)
 exports.getAllExams = async (req, res) => {
   try {
-    // 1. Get the current student's ID
     const studentId = req.user.userId;
 
-    // 2. Fetch all exams
     const exams = await prisma.exam.findMany({
       orderBy: { id: "desc" },
       include: {
@@ -73,18 +66,16 @@ exports.getAllExams = async (req, res) => {
       },
     });
 
-    // 3. Fetch ONLY this student's submissions
     const submissions = await prisma.submission.findMany({
       where: { studentId: studentId },
     });
 
-    // 4. Merge the data! Add "isAttempted" flag to each exam
     const examsWithStatus = exams.map((exam) => {
       const submission = submissions.find((sub) => sub.examId === exam.id);
       return {
         ...exam,
-        isAttempted: !!submission, // true if found, false if not
-        score: submission ? submission.score : null, // Send score if they did it
+        isAttempted: !!submission, 
+        score: submission ? submission.score : null,
         totalScore: submission ? submission.totalScore : null
       };
     });
@@ -95,31 +86,64 @@ exports.getAllExams = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch exams" });
   }
 };
-// 4. Submit Exam & Save Result
+
+// 4. Get Exam Questions for Student
+exports.getExamQuestions = async (req, res) => {
+  try {
+    const examId = parseInt(req.params.id);
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { 
+        id: true, 
+        title: true, 
+        description: true, 
+        duration: true, 
+        totalMarks: true 
+      }
+    });
+
+    if (!exam) return res.status(404).json({ error: "Exam not found" });
+
+    const questions = await prisma.question.findMany({
+      where: { examId: examId },
+      select: {
+        id: true,
+        type: true,
+        text: true,
+        options: true, 
+        marks: true,
+        testCases: true, 
+      }
+    });
+
+    res.json({ exam, questions });
+  } catch (err) {
+    console.error("Get Questions Error:", err);
+    res.status(500).json({ error: "Failed to fetch questions" });
+  }
+};
+
+// 5. Submit Exam & Save Result (ROBUST VERSION)
 exports.submitExam = async (req, res) => {
   try {
-    console.log("📢 SUBMIT REQUEST RECEIVED");
-    console.log("📦 Body:", req.body);
-    console.log("👤 User:", req.user);
-
-    const { examId, answers, tabSwitchCount } = req.body; 
+    console.log("📨 SUBMIT REQUEST RECEIVED");
     
-    //  FIXED: Use req.user.userId
+    // 1. Extract passedCases
+    const { examId, answers, tabSwitchCount, passedCases } = req.body; 
     const studentId = req.user.userId;
 
-    // A. Check if student already took this exam
+    console.log("Passed Cases Received:", passedCases); // DEBUG LOG
+
+    // A. Check duplicate
     const existingSubmission = await prisma.submission.findFirst({
-      where: { 
-        examId: parseInt(examId), 
-        studentId: studentId 
-      }
+      where: { examId: parseInt(examId), studentId: studentId }
     });
 
     if (existingSubmission) {
       return res.status(400).json({ error: "You have already taken this exam!" });
     }
 
-    // B. Fetch correct answers from DB
     const questions = await prisma.question.findMany({
       where: { examId: parseInt(examId) },
     });
@@ -127,17 +151,34 @@ exports.submitExam = async (req, res) => {
     let score = 0;
     let totalScore = 0;
 
-    // C. Calculate Score
+    // B. Calculate Score
     questions.forEach((q) => {
       totalScore += q.marks;
-      const userAnswer = answers[q.id];
-
-      if (userAnswer !== undefined && userAnswer === q.correctOption) {
-        score += q.marks;
+      
+      // MCQ Logic
+      if (q.type === "MCQ") {
+        const userAnswer = answers[q.id];
+        if (userAnswer !== undefined && userAnswer === q.correctOption) {
+          score += q.marks;
+        }
+      } 
+      // CODE Logic (Robust)
+      else if (q.type === "CODE") {
+        // Check if passedCases contains the ID (as int or string)
+        const isPassed = passedCases && (passedCases[q.id] === true || passedCases[String(q.id)] === true);
+        
+        if (isPassed) {
+            score += q.marks;
+            console.log(`✅ Question ${q.id} Passed`);
+        } else {
+            console.log(`❌ Question ${q.id} Failed`);
+        }
       }
     });
 
-    // D. SAVE to Database with Security Data
+    console.log(`🏁 Final Score: ${score}/${totalScore}`);
+
+    // C. Save
     const submission = await prisma.submission.create({
       data: {
         score: score,
@@ -145,7 +186,7 @@ exports.submitExam = async (req, res) => {
         examId: parseInt(examId),
         studentId: studentId,
         tabSwitchCount: tabSwitchCount || 0 ,
-        answers: answers
+        answers: answers 
       }
     });
 
@@ -154,7 +195,7 @@ exports.submitExam = async (req, res) => {
       submissionId: submission.id,
       score: score, 
       total: totalScore, 
-      percentage: ((score / totalScore) * 100).toFixed(2) 
+      percentage: totalScore > 0 ? ((score / totalScore) * 100).toFixed(2) : 0
     });
 
   } catch (err) {
@@ -162,34 +203,27 @@ exports.submitExam = async (req, res) => {
     res.status(500).json({ error: "Failed to submit exam" });
   }
 };
-// 5. Get Teacher Dashboard Stats (Live)
+
+// 6. Get Teacher Stats
 exports.getTeacherStats = async (req, res) => {
   try {
     const teacherId = req.user.userId;
 
-    // A. Count Total Exams Created by this Teacher
-    const totalExams = await prisma.exam.count({
-      where: { teacherId: teacherId }
-    });
+    const totalExams = await prisma.exam.count({ where: { teacherId } });
 
-    // B. Find Recent Submissions for this Teacher's Exams
-    // We join tables to get Student Name and Exam Title
     const recentSubmissions = await prisma.submission.findMany({
-      where: { 
-        exam: { teacherId: teacherId } 
-      },
-      orderBy: { completedAt: 'desc' }, // Newest first
-      take: 5, // Show last 5 activities
+      where: { exam: { teacherId } },
+      orderBy: { completedAt: 'desc' }, 
+      take: 5, 
       include: {
         student: { select: { name: true, email: true } },
         exam: { select: { title: true } }
       }
     });
 
-    // C. Calculate Total Students (Unique students who took exams)
     const uniqueStudents = await prisma.submission.groupBy({
       by: ['studentId'],
-      where: { exam: { teacherId: teacherId } },
+      where: { exam: { teacherId } },
     });
 
     res.json({
@@ -197,52 +231,44 @@ exports.getTeacherStats = async (req, res) => {
       totalStudents: uniqueStudents.length,
       recentActivity: recentSubmissions
     });
-
   } catch (err) {
-    console.error("Dashboard Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 };
 
-// 6. Get Detailed Exam Report (For Student Review)
-// 6. Get Detailed Exam Report (For Student Review)
+// 7. Get Exam Review (Detailed)
 exports.getExamReview = async (req, res) => {
   try {
     const { examId } = req.params;
     const studentId = req.user.userId;
 
-    // 1. Find submission
     const submission = await prisma.submission.findFirst({
-      where: {
-        examId: parseInt(examId),
-        studentId: studentId
-      }
+      where: { examId: parseInt(examId), studentId: studentId }
     });
 
-    if (!submission) {
-      return res.status(404).json({ error: "Submission not found." });
-    }
+    if (!submission) return res.status(404).json({ error: "Submission not found." });
 
-    // 2. Fetch questions
     const questions = await prisma.question.findMany({
       where: { examId: parseInt(examId) },
       select: {
         id: true,
+        type: true,
         text: true,
         options: true,
-        correctOption: true
+        correctOption: true,
+        testCases: true
       }
     });
 
-    // 3. Attach selectedOption WITHOUT touching correctOption
     const reviewData = questions.map((q) => ({
       id: q.id,
+      type: q.type,
       text: q.text,
       options: q.options,
       correctOption: q.correctOption,
-      selectedOption: submission.answers
-        ? submission.answers[q.id.toString()]
-        : null
+      testCases: q.testCases,
+      // Retrieve answer safely (works for int or string)
+      selectedOption: submission.answers ? submission.answers[q.id.toString()] : null
     }));
 
     res.json({
@@ -251,205 +277,178 @@ exports.getExamReview = async (req, res) => {
       totalScore: submission.totalScore,
       reviewData
     });
-
   } catch (err) {
-    console.error("Review Error:", err);
     res.status(500).json({ error: "Failed to load review" });
   }
 };
 
-// 7. Delete Exam (Teacher Only)
+// 8. Delete Exam
 exports.deleteExam = async (req, res) => {
   try {
     const examId = parseInt(req.params.examId);
     const teacherId = req.user.userId;
 
-    // 1. Check if exam exists & belongs to this teacher
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
       select: { teacherId: true }
     });
 
-    if (!exam) {
-      return res.status(404).json({ error: "Exam not found" });
-    }
+    if (!exam || exam.teacherId !== teacherId) return res.status(403).json({ error: "Unauthorized" });
 
-    if (exam.teacherId !== teacherId) {
-      return res.status(403).json({ error: "Unauthorized action" });
-    }
-
-    // 2. DELETE EXAM (cascade will handle questions & submissions)
-    await prisma.exam.delete({
-      where: { id: examId }
-    });
-
+    await prisma.exam.delete({ where: { id: examId } });
     res.json({ message: "Exam deleted successfully" });
-
   } catch (err) {
-    console.error("Delete Exam Error:", err);
     res.status(500).json({ error: "Failed to delete exam" });
   }
 };
 
-// 8. Export Exam Results (Teacher)
+// 9. Export Results
 exports.getExamResults = async (req,res) => {
   try {
     const teacherId = req.user.userId
     const examId = parseInt(req.params.examId)
 
-    if (isNaN(examId)) {
-      return res.status(400).json({ error: "Invalid exam ID" });
-    } 
-
-    // 1. validate teacher
     const exam = await prisma.exam.findUnique({
       where: {id: examId},
       select: {teacherId: true, title: true, totalMarks: true }
     })
 
-    if(!exam) {
-      return res.status(404).json({error: "Exam not Found !"})
-    }
+    if(!exam || exam.teacherId !== teacherId) return res.status(403).json({error: "Unauthorised !"})
 
-    if(exam.teacherId !== teacherId) {
-      return res.status(403).json({error: "Unauthorised !"})
-    }
-
-    // 2. fetch exam + submissions 
     const submissions = await prisma.submission.findMany({
       where: {examId},
-      include: {
-        student: {
-          select: {
-            name: true,
-            email: true,
-          }
-        }
-      }
+      include: { student: { select: { name: true, email: true } } }
     })
 
-     // 3. Format export data
-     const results = submissions.map((sub)=> {
-      const percentage = Math.round(
-        (sub.score / sub.totalScore) * 100
-      )
+    const results = submissions.map((sub)=> {
+      const percentage = sub.totalScore > 0 ? Math.round((sub.score / sub.totalScore) * 100) : 0;
       return {
         name: sub.student.name,
         email: sub.student.email,
         score: sub.score,
         totalScore: sub.totalScore,
-         percentage,
+        percentage,
         result: percentage >= 35 ? "PASS" : "FAIL",
         tabSwitchCount: sub.tabSwitchCount,
       }
-
     })
-    res.json({
-      examTitle: exam.title,
-      results,
-
-    })
-
+    res.json({ examTitle: exam.title, results })
   }catch (err) {
-    console.error("Export Results Error:", err);
     res.status(500).json({ error: "Failed to export results" });
   }
 }
 
-// 9. Exam Details for Teacher (View Page)
-exports.getExamDetails = async (req, res) => {
+// 10. Exam Details
+// 3. Get All Exams (Smart Version)
+exports.getAllExams = async (req, res) => {
   try {
-    const examId = Number(req.params.examId);
-    const teacherId = req.user.userId;
+    // 📢 LOG 1: Check if user exists
+    console.log("---- GET ALL EXAMS ----");
+    console.log("👤 User from Token:", req.user);
 
-    // 1. Validate examId
-    if (isNaN(examId)) {
-      return res.status(400).json({ error: "Invalid exam ID" });
+    if (!req.user || !req.user.userId) {
+      console.log("❌ Error: User ID missing in token");
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // 2. Check exam exists & belongs to teacher
-    const exam = await prisma.exam.findUnique({
-      where: { id: examId },
-      select: {
-        id: true,
-        title: true,
-        totalMarks: true,
-        teacherId: true,
+    const studentId = req.user.userId;
+
+    // 📢 LOG 2: Fetching Exams
+    const exams = await prisma.exam.findMany({
+      orderBy: { id: "desc" },
+      include: {
+        teacher: { select: { name: true } },
       },
     });
 
-    if (!exam) {
-      return res.status(404).json({ error: "Exam not found" });
+    // 📢 LOG 3: Fetching Submissions
+    const submissions = await prisma.submission.findMany({
+      where: { studentId: studentId },
+    });
+
+    const examsWithStatus = exams.map((exam) => {
+      const submission = submissions.find((sub) => sub.examId === exam.id);
+      return {
+        ...exam,
+        isAttempted: !!submission, 
+        score: submission ? submission.score : null,
+        totalScore: submission ? submission.totalScore : null
+      };
+    });
+
+    console.log(`✅ Found ${exams.length} exams`);
+    res.json(examsWithStatus);
+  } catch (err) {
+    console.error("🔥 CRITICAL ERROR in getAllExams:", err);
+    res.status(500).json({ error: "Failed to fetch exams", details: err.message });
+  }
+};
+
+// 10. Exam Details
+// 10. Exam Details (Updated & Safer)
+exports.getExamDetails = async (req, res) => {
+  try {
+    console.log("---- GET EXAM DETAILS ----");
+    console.log("📥 Requested Exam ID:", req.params.examId);
+    console.log("👤 User:", req.user);
+
+    // 1. Validate Exam ID
+    const examId = parseInt(req.params.examId);
+    if (isNaN(examId)) {
+        console.log("❌ Error: Invalid Exam ID (NaN)");
+        return res.status(400).json({ error: "Invalid Exam ID provided" });
     }
 
-    if (exam.teacherId !== teacherId) {
+    const teacherId = req.user.userId;
+
+    // 2. Check if the exam belongs to this teacher
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, title: true, totalMarks: true, teacherId: true },
+    });
+
+    // 3. Security Check
+    if (!exam) {
+        return res.status(404).json({ error: "Exam not found" });
+    }
+    
+    // Allow students to view details OR enforce teacher-only? 
+    // Usually 'details' with stats is for teachers.
+    if (req.user.role === "TEACHER" && exam.teacherId !== teacherId) {
       return res.status(403).json({ error: "Unauthorized access" });
     }
 
-    // 3. Fetch submissions with student info
+    // 4. Fetch submissions
     const submissions = await prisma.submission.findMany({
       where: { examId },
-      include: {
-        student: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-      },
+      include: { student: { select: { name: true, email: true } } },
       orderBy: { completedAt: "desc" },
     });
 
-    // 4. Compute analytics
+    // 5. Calculate Stats
     const attempts = submissions.length;
+    const totalScoreSum = submissions.reduce((sum, s) => sum + s.score, 0);
+    const avgScore = attempts > 0 ? Number((totalScoreSum / attempts).toFixed(2)) : 0;
+    const passCount = submissions.filter((s) => s.totalScore > 0 && s.score / s.totalScore >= 0.35).length;
+    const passRate = attempts > 0 ? Math.round((passCount / attempts) * 100) : 0;
 
-    const totalScoreSum = submissions.reduce(
-      (sum, s) => sum + s.score,
-      0
-    );
-
-    const avgScore =
-      attempts > 0 ? Number((totalScoreSum / attempts).toFixed(2)) : 0;
-
-    const passCount = submissions.filter(
-      (s) => s.totalScore > 0 && s.score / s.totalScore >= 0.35
-    ).length;
-
-    const passRate =
-      attempts > 0 ? Math.round((passCount / attempts) * 100) : 0;
-
-    // 5. Format student-wise data
-    const formattedSubmissions = submissions.map((s) => {
-      const percentage =
-        s.totalScore > 0
-          ? Math.round((s.score / s.totalScore) * 100)
-          : 0;
-
-      return {
+    const formattedSubmissions = submissions.map((s) => ({
         studentName: s.student.name,
         email: s.student.email,
         score: s.score,
         totalScore: s.totalScore,
-        percentage,
-        result: percentage >= 35 ? "PASS" : "FAIL",
+        percentage: s.totalScore > 0 ? Math.round((s.score / s.totalScore) * 100) : 0,
+        result: (s.totalScore > 0 && s.score / s.totalScore >= 0.35) ? "PASS" : "FAIL",
         tabSwitchCount: s.tabSwitchCount,
         submittedAt: s.completedAt,
-      };
-    });
+    }));
 
-    // 6. Final response
     res.json({
-      exam: {
-        title: exam.title,
-        attempts,
-        avgScore,
-        passRate,
-      },
+      exam: { title: exam.title, attempts, avgScore, passRate },
       submissions: formattedSubmissions,
     });
   } catch (err) {
-    console.error("Exam Details Error:", err);
+    console.error("🔥 Get Details Error:", err.message);
     res.status(500).json({ error: "Failed to fetch exam details" });
   }
 };
-

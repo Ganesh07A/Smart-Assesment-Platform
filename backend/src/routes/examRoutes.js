@@ -13,4 +13,7 @@ router.get("/:examId/results", authenticateToken, examcontroller.getExamResults)
 router.delete("/:examId", authenticateToken, examcontroller.deleteExam);
 router.get("/:examId/details", authenticateToken, examcontroller.getExamDetails)
 
+// 🆕 NEW: Fetch Questions for Student (Fixes the 404 Error)
+router.get("/:id/questions", authenticateToken, examcontroller.getExamQuestions)
+
 module.exports = router

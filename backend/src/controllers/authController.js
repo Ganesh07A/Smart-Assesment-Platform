@@ -30,49 +30,42 @@ exports.register = async (req, res) => {
 };
 
 //Login user
+// Login user
 exports.login = async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    // 1. Only extract email and password (ignore role from frontend)
+    const { email, password } = req.body; 
     
-    // 📢 SPY LOG 1: What is coming from the frontend?
     console.log("---- LOGIN ATTEMPT ----");
     console.log("📥 Email:", email);
-    console.log("📥 Role Requested:", role);
 
-    // 1. Check if user exists
+    // 2. Check if user exists
     const user = await prisma.user.findUnique({ where: { email } });
     
     if (!user) {
-      console.log("❌ Error: User not found in Database");
+      console.log("❌ Error: User not found");
       return res.status(400).json({ error: "User not found" });
     }
 
-    // 📢 SPY LOG 2: What is actually in the database?
     console.log("👤 User Found in DB:", user.name);
     console.log("👤 Role in DB:", user.role);
 
-    // 2. SECURITY CHECK: Enforce Role Matching
-    if (user.role !== role) {
-      console.log(`❌ BLOCKING: User is a '${user.role}' but tried to login as '${role}'`);
-      return res.status(403).json({ 
-        error: `Access Denied! This account is registered as a ${user.role}, not a ${role}.` 
-      });
-    }
+    // 3. REMOVED THE ROLE CHECK HERE
+    // We trust the database. If the password is correct, we let them in as their stored role.
 
-    // 3. Check Password
+    // 4. Check Password
     const validPass = await bcrypt.compare(password, user.password);
     if (!validPass) {
       console.log("❌ Error: Wrong Password");
       return res.status(400).json({ error: "Invalid password" });
     }
 
-    // 4. Check JWT Secret (Common Crash Cause)
+    // 5. Check JWT Secret
     if (!process.env.SECRET_KEY) {
-      console.log("❌ CRITICAL ERROR: process.env.SECRET_KEY is missing!");
       throw new Error("Server Misconfiguration: No SECRET_KEY");
     }
 
-    // 5. Generate Token
+    // 6. Generate Token (Uses the Role from Database)
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.SECRET_KEY,
@@ -80,6 +73,8 @@ exports.login = async (req, res) => {
     );
 
     console.log("✅ Login Successful!");
+    
+    // Send back the role so the frontend knows where to redirect
     res.json({ token, role: user.role, name: user.name });
 
   } catch (err) {

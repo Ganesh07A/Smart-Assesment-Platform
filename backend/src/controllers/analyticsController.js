@@ -32,20 +32,22 @@ exports.getTeacherExamAnalytics = async (req, res) => {
           attempts: 0,
           avgScore: 0,
           passRate: 0,
+          passCount: 0, // <--- Added
+          failCount: 0, // <--- Added
           highest: 0,
           lowest: 0
         };
       }
 
       const scores = exam.submissions.map(s => s.score);
-      const totalScores = exam.submissions.map(s => s.totalScore);
-
-      const avgScore =
-        scores.reduce((a, b) => a + b, 0) / attempts;
+      
+      const avgScore = scores.reduce((a, b) => a + b, 0) / attempts;
 
       const passCount = exam.submissions.filter(
         s => s.score / s.totalScore >= 0.35
       ).length;
+
+      const failCount = attempts - passCount; // <--- Calculated
 
       return {
         examId: exam.id,
@@ -53,6 +55,8 @@ exports.getTeacherExamAnalytics = async (req, res) => {
         attempts,
         avgScore: Number(avgScore.toFixed(2)),
         passRate: Math.round((passCount / attempts) * 100),
+        passCount, // <--- Return explicit count
+        failCount, // <--- Return explicit count
         highest: Math.max(...scores),
         lowest: Math.min(...scores)
       };

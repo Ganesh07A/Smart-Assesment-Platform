@@ -2,6 +2,15 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const xlsx = require("xlsx");
 
+// Helper to normalize keys (e.g., " Type " -> "Type")
+const normalizeRow = (row) => {
+  const newRow = {};
+  Object.keys(row).forEach((key) => {
+    newRow[key.trim()] = row[key];
+  });
+  return newRow;
+};
+
 exports.uploadQuestions = async (req, res) => {
   try {
     if (!req.file) {
@@ -13,48 +22,125 @@ exports.uploadQuestions = async (req, res) => {
       return res.status(400).json({ error: "Exam ID is required" });
     }
 
-    // 1. Read the Excel File
+    // 1. Read File
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet);
+    // raw: false ensures all fields are strings initially to prevent type errors
+    let data = xlsx.utils.sheet_to_json(sheet, { defval: "" });
 
     if (data.length === 0) {
       return res.status(400).json({ error: "Sheet is empty" });
     }
 
-    // 2. Map the data based on your specific Excel columns
-    const questionsToInsert = data.map((row, index) => {
-      // Map 'Option 1' -> optA, 'Option 2' -> optB, etc.
-      const qText = row["Question"];
-      const optA = row["Option 1"];
-      const optB = row["Option 2"];
-      const optC = row["Option 3"];
-      const optD = row["Option 4"];
-      
-      // Handle Correct Option: Excel has 1-4, DB needs 0-3
-      let correctVal = row["Correct Option Number"];
-      // If correctVal is "2", we want index 1.
-      const correctIndex = correctVal ? parseInt(correctVal) - 1 : 0; 
-      
-      const marks = row["Marks"] || 1;
+    console.log(`📂 Processing ${data.length} rows...`);
+    
+    // Debug: Print first row headers
+    console.log("🔍 Headers found:", Object.keys(normalizeRow(data[0])));
 
-      // Validation: If main fields are missing, skip this row
-      if (!qText || optA === undefined || optB === undefined) {
-        console.warn(`⚠️ Skipping Row ${index + 1}: Missing data`, row);
-        return null;
-      }
+    // 2. Map & Validate
+    const questionsToInsert = data.map((rawRow, index) => {
+      const row = normalizeRow(rawRow); // Fix header spaces
+      const rowNum = index + 2; // Excel row number (1-based + header)
 
-      return {
+      // Get Type (Default to MCQ if empty)
+      const rawType = row["Type"] ? String(row["Type"]).trim().toUpperCase() : "MCQ";
+      const marks = row["Marks"] ? parseInt(row["Marks"]) : 1;
+      
+      const commonData = {
         examId: parseInt(examId),
-        text: qText,
-        options: [optA, optB, optC, optD].filter((opt) => opt !== undefined),
-        correctOption: correctIndex, 
-        marks: parseInt(marks),
+        marks: marks,
       };
-    }).filter(q => q !== null); // Remove null rows
 
-    // 3. Save to Database
+      // === LOGIC FOR CODE QUESTIONS ===
+      if (rawType === "CODE") {
+        const problemDesc = row["Problem Description"];
+        const inputFmt = row["Input Format"];
+        
+        // Strict Check
+        if (!problemDesc) {
+          console.warn(`❌ Skipping Row ${rowNum} [CODE]: Missing 'Problem Description'`);
+          return null;
+        }
+
+        // Parse Test Cases safely
+        let parsedTestCases = [];
+        try {
+          if (row["Test Cases"] && row["Test Cases"] !== "") {
+            // If Excel encoded quotes weirdly, fix them
+            let jsonStr = String(row["Test Cases"]).replace(/""/g, '"');
+            if (jsonStr.startsWith('"') && jsonStr.endsWith('"')) {
+              jsonStr = jsonStr.slice(1, -1);
+            }
+            parsedTestCases = JSON.parse(jsonStr);
+          }
+        } catch (e) {
+          console.warn(`⚠️ Row ${rowNum}: Invalid JSON in 'Test Cases' - saving empty array.`);
+        }
+
+        return {
+          ...commonData,
+          questionType: "CODE",
+          problemDescription: problemDesc,
+          inputFormat: row["Input Format"] || "None",
+          outputFormat: row["Output Format"] || "None",
+          sampleInput: row["Sample Input"] ? String(row["Sample Input"]) : "",
+          sampleOutput: row["Sample Output"] ? String(row["Sample Output"]) : "",
+          testCases: parsedTestCases,
+          maxMarks: marks
+        };
+      } 
+      
+      // === LOGIC FOR MCQ QUESTIONS ===
+      else {
+        const qText = row["Question"];
+        const optA = row["Option 1"];
+        
+        if (!qText || !optA) {
+          console.warn(`❌ Skipping Row ${rowNum} [MCQ]: Missing 'Question' or 'Option 1'`);
+          return null;
+        }
+
+        // Handle Correct Option (allows "Option B", "2", or 2)
+        let correctVal = row["Correct Option Number"];
+        let correctIndex = 0;
+        
+        if (correctVal) {
+           const valStr = String(correctVal).trim().toLowerCase();
+           if (valStr.includes("option a") || valStr === "1") correctIndex = 0;
+           else if (valStr.includes("option b") || valStr === "2") correctIndex = 1;
+           else if (valStr.includes("option c") || valStr === "3") correctIndex = 2;
+           else if (valStr.includes("option d") || valStr === "4") correctIndex = 3;
+           else correctIndex = parseInt(correctVal) - 1 || 0;
+        }
+
+        return {
+          ...commonData,
+          questionType: "MCQ",
+          text: qText,
+          options: [
+            String(row["Option 1"] || ""),
+            String(row["Option 2"] || ""),
+            String(row["Option 3"] || ""),
+            String(row["Option 4"] || "")
+          ].filter(o => o !== ""),
+          correctOption: correctIndex,
+        };
+      }
+    }).filter(q => q !== null);
+
+    // 3. Final Check before DB Insert
+    if (questionsToInsert.length === 0) {
+      console.error("❌ No valid questions passed validation.");
+      return res.status(400).json({ 
+        error: "No valid questions found in file.", 
+        details: "Check server console for row-by-row validation errors." 
+      });
+    }
+
+    console.log(`✅ Ready to insert ${questionsToInsert.length} questions.`);
+
+    // 4. Save to Database
     const result = await prisma.question.createMany({
       data: questionsToInsert,
     });
@@ -62,34 +148,38 @@ exports.uploadQuestions = async (req, res) => {
     res.status(201).json({ 
       message: "Questions uploaded successfully!", 
       count: result.count,
-      skipped: data.length - result.count 
     });
 
   } catch (error) {
-    console.error("Upload Error:", error);
+    console.error("🔥 Upload Error:", error);
     res.status(500).json({ error: "Failed to upload questions", details: error.message });
   }
 };
 
-// get exam Questions for students without correct ands 
+// ==========================================
+// 2. GET ALL QUESTIONS (Used by ExamView)
+// ==========================================
+exports.getAllQuestions = async (req, res) => {
+  try {
+    const { examId } = req.params;
 
-exports.getAllQuestions = async (req,res) => {
-    try {
-        const { examId }  =req.params;
-        const questions = await prisma.question.findMany({
-        where:{examId: parseInt(examId)},
-        select: {
-            id:true,
-            text: true,
-            options: true,
-            marks: true,
-        }})
+    const questions = await prisma.question.findMany({
+      where: { examId: parseInt(examId) },
+      select: {
+        id: true,
+        questionType: true,
+        text: true, options: true, marks: true, // MCQ
+        problemDescription: true, inputFormat: true, outputFormat: true, // CODE
+        sampleInput: true, sampleOutput: true, maxMarks: true
+      },
+    });
 
-        if(!questions || questions.length == 0) {
-            return res.status(201).json({ error: "No questions found for this exam"})
-        }
-        res.json(questions)
-    }catch (err) {
-        res.status(500).json({error:"failed to fetch questions !", })
+    if (!questions.length) {
+      return res.status(404).json({ error: "No questions found" });
     }
-}
+
+    res.json(questions);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch questions" });
+  }
+};
