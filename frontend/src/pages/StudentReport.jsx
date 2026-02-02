@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
+
 import toast from "react-hot-toast";
 
 export default function StudentReport() {
@@ -34,7 +34,7 @@ export default function StudentReport() {
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
-            <Navbar />
+            
             <div className="max-w-4xl mx-auto p-6">
                 
                 {/* 🏆 Score Card */}
@@ -55,46 +55,63 @@ export default function StudentReport() {
                     {report.reviewData.map((q, index) => (
                         <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                             
-                            {/* Question Text (Shows 1, 2, 3... regardless of DB ID) */}
-                            <div className="flex gap-3 mb-4">
-                                <span className="bg-gray-100 text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">
-                                    {index + 1}
-                                </span>
-                                <h3 className="text-lg font-bold text-gray-800 pt-0.5">{q.text}</h3>
+                            {/* Question Header */}
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex gap-3">
+                                    <span className="bg-gray-100 text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">
+                                        {index + 1}
+                                    </span>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800 pt-0.5 whitespace-pre-wrap">{q.text}</h3>
+                                        <span className={`text-xs px-2 py-0.5 rounded font-bold ${q.type === 'CODE' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                            {q.type === 'CODE' ? 'Code' : 'MCQ'}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Options */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {q.options.map((opt, optIndex) => {
-                                    // ⚡ Strict Number Conversion
-                                    const correctIndex = Number(q.correctOption);
-                                    const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined) 
-                                        ? Number(q.selectedOption) 
-                                        : null;
+                            {/* --- CONTENT BASED ON TYPE --- */}
+                            
+                            {q.type === "MCQ" ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {q.options.map((opt, optIndex) => {
+                                        const correctIndex = Number(q.correctOption);
+                                        const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined) 
+                                            ? Number(q.selectedOption) 
+                                            : null;
 
-                                    const isCorrect = optIndex === correctIndex;
-                                    const isSelected = optIndex === selectedIndex;
+                                        const isCorrect = optIndex === correctIndex;
+                                        const isSelected = optIndex === selectedIndex;
 
-                                    // Color Logic
-                                    let style = "border-gray-200 bg-white text-gray-500";
-                                    let icon = null;
+                                        let style = "border-gray-200 bg-white text-gray-500";
+                                        let icon = null;
 
-                                    if (isCorrect) {
-                                        style = "border-green-500 bg-green-50 text-green-700 ring-1 ring-green-200 font-bold";
-                                        icon = "✅";
-                                    } else if (isSelected) {
-                                        style = "border-red-500 bg-red-50 text-red-700 ring-1 ring-red-200 font-bold";
-                                        icon = "❌";
-                                    }
+                                        if (isCorrect) {
+                                            style = "border-green-500 bg-green-50 text-green-700 ring-1 ring-green-200 font-bold";
+                                            icon = "✅";
+                                        } else if (isSelected) {
+                                            style = "border-red-500 bg-red-50 text-red-700 ring-1 ring-red-200 font-bold";
+                                            icon = "❌";
+                                        }
 
-                                    return (
-                                        <div key={optIndex} className={`p-4 rounded-xl border-2 flex justify-between items-center transition-all ${style}`}>
-                                            <span>{opt}</span>
-                                            <span>{icon}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        return (
+                                            <div key={optIndex} className={`p-4 rounded-xl border-2 flex justify-between items-center transition-all ${style}`}>
+                                                <span>{opt}</span>
+                                                <span>{icon}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                // --- CODING ANSWER DISPLAY ---
+                                <div className="bg-gray-900 rounded-xl p-4 overflow-hidden border border-gray-800">
+                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Your Code Submission:</p>
+                                    <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap overflow-x-auto p-2">
+                                        {q.selectedOption || "// No code submitted"}
+                                    </pre>
+                                </div>
+                            )}
+
                         </div>
                     ))}
                 </div>

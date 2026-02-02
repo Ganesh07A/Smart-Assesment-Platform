@@ -1,337 +1,322 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import toast from "react-hot-toast"; // <--- 1. Import Toast
-import Navbar from "../components/Navbar";
+import toast from "react-hot-toast";
+import {
+  Timer,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Grid,
+  Maximize,
+  ShieldAlert,
+} from "lucide-react";
 
 export default function ExamView() {
   const { examId } = useParams();
   const navigate = useNavigate();
+  const timerRef = useRef(null);
 
-  // --- STATE ---
+  // ---------------- STATE ----------------
+  const [exam, setExam] = useState(null);
   const [questions, setQuestions] = useState([]);
-  const [currentQIndex, setCurrentQIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(0);
-  
-  // Custom Modal State
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  
-  // Refs
-  const tabSwitchesRef = useRef(0);
-  const answersRef = useRef({});
-  
-  const [tabSwitches, setTabSwitches] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // --- 1. FETCH EXAM DATA ---
+  const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [markedForReview, setMarkedForReview] = useState(new Set());
+
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  // Security
+  const [hasStarted, setHasStarted] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [warningCount, setWarningCount] = useState(0);
+  const MAX_WARNINGS = 3;
+
+  // ---------------- FETCH EXAM ----------------
   useEffect(() => {
-    const fetchExamData = async () => {
+    const fetchExam = async () => {
       try {
         const token = localStorage.getItem("token");
-        const qRes = await axios.get(`http://localhost:5000/api/questions/${examId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setQuestions(qRes.data);
 
-        const eRes = await axios.get("http://localhost:5000/api/exams/all", {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const currentExam = eRes.data.find(e => e.id === parseInt(examId));
-        
-        if (currentExam) setTimeLeft(currentExam.duration * 60); 
+        const examRes = await axios.get(
+          `http://localhost:5000/api/exams/${examId}/details`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const qRes = await axios.get(
+          `http://localhost:5000/api/exams/${examId}/questions`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        setExam(examRes.data.exam);
+        setQuestions(qRes.data.questions || qRes.data);
+        setTimeLeft(examRes.data.exam.duration * 60);
         setLoading(false);
-      } catch (err) {
-        toast.error("Failed to load exam!");
+      } catch {
+        toast.error("Failed to load exam");
         navigate("/student-dashboard");
       }
     };
-    fetchExamData();
+
+    fetchExam();
   }, [examId, navigate]);
 
-  // --- CORE SUBMIT LOGIC ---
-  const submitExam = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const finalAnswers = answersRef.current;
-      const finalCheatCount = tabSwitchesRef.current;
-
-      const res = await axios.post("http://localhost:5000/api/exams/submit", {
-        examId: examId,
-        answers: finalAnswers,
-        tabSwitchCount: finalCheatCount 
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      // 🎨 Success Toast instead of Alert
-      toast.success(`Exam Submitted! Score: ${res.data.score}/${res.data.total}`);
-      
-      if (document.fullscreenElement) {
-         document.exitFullscreen().catch(err => console.log(err));
-      }
-      navigate("/student/result", {
-        state: { 
-        score: res.data.score, 
-        total: res.data.total, 
-        percentage: res.data.percentage 
-      }
-      });
-    } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.error || "Submission failed!";
-      toast.error(msg); // 🎨 Error Toast
-      setShowConfirmModal(false); // Close modal if open
-    }
-  };
-
-  // --- TRIGGER HANDLER ---
-  const handleSubmitTrigger = useCallback((autoSubmit = false) => {
-    if (autoSubmit) {
-       submitExam(); // Skip modal if time runs out or cheating
-    } else {
-       setShowConfirmModal(true); // Show custom modal
-    }
-  }, []);
-
-  // --- TIMER ---
+  // ---------------- TIMER ----------------
   useEffect(() => {
-    if (loading || timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleSubmitTrigger(true); // Auto-submit
-          return 0;
+    if (hasStarted && timeLeft > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((t) => {
+          if (t <= 1) {
+            handleSubmit("Time Up");
+            return 0;
+          }
+          return t - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [hasStarted, timeLeft]);
+
+  // ---------------- SUBMIT ----------------
+  const handleSubmit = useCallback(
+    async (reason = "Normal") => {
+      try {
+        clearInterval(timerRef.current);
+        const token = localStorage.getItem("token");
+
+        await axios.post(
+          "http://localhost:5000/api/exams/submit",
+          { examId, answers, tabSwitchCount: warningCount },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
         }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [loading, timeLeft, handleSubmitTrigger]);
 
-  // --- SECURITY ---
+        toast.success(
+          reason === "Auto"
+            ? "Exam auto-submitted due to violations"
+            : "Exam submitted successfully"
+        );
+
+        navigate("/student/result");
+      } catch {
+        toast.error("Submission failed");
+      }
+    },
+    [examId, answers, warningCount, navigate]
+  );
+
+  // ---------------- WARNINGS ----------------
+  const triggerWarning = useCallback(
+    (msg) => {
+      setWarningCount((c) => {
+        const next = c + 1;
+        toast.error(`⚠ Warning ${next}/${MAX_WARNINGS} — ${msg}`, {
+          style: { background: "#111", color: "#fff" },
+        });
+
+        if (next >= MAX_WARNINGS) {
+          handleSubmit("Auto");
+        }
+        return next;
+      });
+    },
+    [handleSubmit]
+  );
+
+  // ---------------- FULLSCREEN & TAB ----------------
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    if (!hasStarted) return;
+
+    const onFullscreen = () => {
+      const active = !!document.fullscreenElement;
+      setIsFullScreen(active);
+
+      if (!active) {
+        clearInterval(timerRef.current);
+        triggerWarning("Full screen exited");
+      }
+    };
+
+    const onVisibility = () => {
       if (document.hidden) {
-        tabSwitchesRef.current += 1;
-        setTabSwitches(tabSwitchesRef.current);
-        if (tabSwitchesRef.current >= 3) {
-             toast.error("CHEAT DETECTED: Auto-submitting..."); // 🎨 Error Toast
-             handleSubmitTrigger(true); 
-        } else {
-             toast("Warning: Tab switching is monitored!", { icon: '⚠️' });
-        }
+        triggerWarning("Tab switched");
       }
     };
 
-    const handleFullScreenChange = () => {
-        setIsFullScreen(!!document.fullscreenElement);
-    };
-
-    const handleContextMenu = (e) => e.preventDefault();
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey && ["c","v","u"].includes(e.key)) || e.key === "F12") {
-        e.preventDefault();
-        toast.error("Action Blocked!");
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    document.addEventListener("fullscreenchange", handleFullScreenChange);
-    document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", onFullscreen);
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      document.removeEventListener("fullscreenchange", handleFullScreenChange);
-      document.removeEventListener("contextmenu", handleContextMenu);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [handleSubmitTrigger]);
+  }, [hasStarted, triggerWarning]);
 
-  // --- HANDLERS ---
-  const handleSelectOption = (optionIndex) => {
-    const currentQuestion = questions[currentQIndex];
-    setAnswers(prev => {
-        const newAnswers = { ...prev, [currentQuestion.id]: optionIndex };
-        answersRef.current = newAnswers; 
-        return newAnswers;
-    });
+  // ---------------- START EXAM ----------------
+  const startExam = () => {
+    document.documentElement
+      .requestFullscreen()
+      .then(() => {
+        setHasStarted(true);
+        setIsFullScreen(true);
+      })
+      .catch(() => toast.error("Fullscreen permission denied"));
   };
 
-  const enterFullScreen = () => {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch((err) => console.log(err));
-      setIsFullScreen(true);
-    }
+  // ---------------- HELPERS ----------------
+  const currentQ = questions[currentQIndex];
+
+  const getStatusClass = (index) => {
+    const q = questions[index];
+    if (index === currentQIndex) return "bg-blue-600 text-white";
+    if (markedForReview.has(q.id)) return "bg-purple-500 text-white";
+    if (answers[q.id] !== undefined) return "bg-green-500 text-white";
+    return "bg-gray-200 text-gray-700";
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
-
-  if (loading) return <div className="text-center mt-20">Loading Exam...</div>;
-
-  if (!isFullScreen) {
+  // ---------------- LOADING ----------------
+  if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4">
-        <h1 className="text-3xl font-bold mb-4 text-red-500">⚠️ Security Lockdown</h1>
-        <p className="mb-8 text-center max-w-md">Full Screen is required to take this exam.</p>
-        <button onClick={enterFullScreen} className="px-8 py-3 bg-blue-600 rounded-lg font-bold hover:bg-blue-700 transition">Enter Full Screen</button>
+      <div className="h-screen flex items-center justify-center text-gray-500">
+        Loading exam…
       </div>
     );
   }
 
-  if (!questions || questions.length === 0) return <div className="text-center mt-20">No questions found.</div>;
-
-  const currentQuestion = questions[currentQIndex];
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col select-none font-sans relative">
-      <Navbar />
-      
-      {/* --- CONFIRMATION MODAL --- */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl transform transition-all scale-100">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Submit Exam?</h3>
-                <p className="text-gray-500 mb-6">Are you sure you want to finish? You cannot change your answers after submitting.</p>
-                <div className="flex gap-4">
-                    <button 
-                        onClick={() => setShowConfirmModal(false)}
-                        className="flex-1 py-3 text-gray-700 font-bold bg-gray-100 hover:bg-gray-200 rounded-xl transition"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={submitExam}
-                        className="flex-1 py-3 text-white font-bold bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-200 transition"
-                    >
-                        Yes, Submit
-                    </button>
-                </div>
-            </div>
+  // ---------------- LOBBY ----------------
+  if (!hasStarted) {
+    return (
+      <div className="h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-white rounded-2xl p-10 w-[420px] text-center space-y-6">
+          <Maximize className="mx-auto text-blue-600" size={48} />
+          <h1 className="text-xl font-semibold">
+            Full Screen Required to Take Exam
+          </h1>
+          <p className="text-sm text-gray-500">
+            Exiting full screen or switching tabs will generate warnings.
+          </p>
+          <button
+            onClick={startExam}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium"
+          >
+            Enter Full Screen & Start
+          </button>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Main Content */}
-      <main className={`grow flex flex-col md:flex-row gap-6 p-6 max-w-7xl mx-auto w-full transition-all ${showConfirmModal ? 'blur-sm' : ''}`}>
-        
-        {/* Left: Question Card */}
-        <div className="flex-1">
-          <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 relative overflow-hidden h-full flex flex-col">
-             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500"></div>
+  // ---------------- MAIN UI ----------------
+  return (
+    <div
+      className="h-screen flex flex-col bg-gray-50 overflow-hidden select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+    >
+      {/* HEADER */}
+      <header className="h-14 bg-gray-900 text-white px-6 flex justify-between items-center">
+        <h1 className="text-sm font-semibold truncate">{exam.title}</h1>
 
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">
-                Question {currentQIndex + 1} of {questions.length}
-              </h2>
-              <div className={`text-lg font-mono px-4 py-2 rounded-lg font-bold border ${timeLeft < 60 ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-white text-gray-700 border-gray-200"}`}>
-                ⏱️ {formatTime(timeLeft)}
-              </div>
-            </div>
+        <div className="flex items-center gap-4">
+          <div className="bg-gray-800 px-4 py-1 rounded-md font-mono text-sm">
+            ⏱ {Math.floor(timeLeft / 60)}:
+            {(timeLeft % 60).toString().padStart(2, "0")}
+          </div>
 
-            <p className="text-lg text-gray-800 mb-8 font-medium leading-relaxed">{currentQuestion.text}</p>
+          <button
+            onClick={() => window.confirm("Submit exam?") && handleSubmit()}
+            className="border border-red-500 text-red-400 px-4 py-1 rounded-md text-sm"
+          >
+            Submit
+          </button>
+        </div>
+      </header>
 
-            <div className="space-y-4 grow">
-              {currentQuestion.options.map((option, index) => {
-                const isSelected = answers[currentQuestion.id] === index;
-                return (
+      {/* CONTENT */}
+      <div className="flex flex-1">
+        {/* QUESTION */}
+        <main className="flex-1 flex items-center justify-center">
+          <div className="bg-white w-[700px] rounded-2xl p-8 border">
+            <p className="text-xs text-gray-500 mb-2">
+              Question {currentQIndex + 1} of {questions.length}
+            </p>
+
+            <h2 className="text-xl font-medium text-gray-900 mb-6">
+              {currentQ.text}
+            </h2>
+
+            {currentQ.type === "MCQ" && (
+              <div className="space-y-3">
+                {currentQ.options.map((opt, i) => (
                   <button
-                    key={index}
-                    onClick={() => handleSelectOption(index)}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center group ${
-                      isSelected 
-                        ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold shadow-sm" 
-                        : "border-gray-200 hover:border-blue-300 hover:bg-gray-50 text-gray-600"
+                    key={i}
+                    onClick={() =>
+                      setAnswers((a) => ({ ...a, [currentQ.id]: i }))
+                    }
+                    className={`flex gap-4 p-4 rounded-lg border w-full text-left
+                    ${
+                      answers[currentQ.id] === i
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-gray-200 hover:bg-gray-50"
                     }`}
                   >
-                    <span className={`mr-4 inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold transition-colors ${
-                      isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600"
-                    }`}>
-                      {String.fromCharCode(65 + index)}
-                    </span>
-                    {option}
+                    <div className="w-8 h-8 rounded-full border flex items-center justify-center">
+                      {String.fromCharCode(65 + i)}
+                    </div>
+                    {opt}
                   </button>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
-              <button 
-                disabled={currentQIndex === 0} 
-                onClick={() => setCurrentQIndex((prev) => prev - 1)} 
-                className="px-6 py-2 text-gray-500 font-medium disabled:opacity-30 hover:text-gray-800 transition-colors"
-              >
-                ← Previous
-              </button>
-
-              {currentQIndex === questions.length - 1 ? (
-                <button 
-                  onClick={() => handleSubmitTrigger(false)} 
-                  className="px-8 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md transition-transform active:scale-95"
-                >
-                  Submit Exam
-                </button>
-              ) : (
-                <button 
-                  onClick={() => setCurrentQIndex((prev) => prev + 1)} 
-                  className="px-8 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md transition-transform active:scale-95"
-                >
-                  Next →
-                </button>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </main>
 
-        {/* Right: Palette */}
-        <div className="w-full md:w-80 shrink-0">
-            <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 sticky top-6">
-                <h3 className="text-gray-800 font-bold mb-4 text-sm uppercase tracking-wide">Question Palette</h3>
-                
-                <div className="grid grid-cols-5 gap-2">
-                    {questions.map((q, idx) => {
-                        const isAnswered = answers[q.id] !== undefined;
-                        const isCurrent = idx === currentQIndex;
-                        return (
-                            <button
-                                key={idx}
-                                onClick={() => setCurrentQIndex(idx)}
-                                className={`h-10 w-10 rounded-lg text-sm font-bold transition-all ${
-                                    isCurrent ? "bg-blue-600 text-white shadow-md scale-110 ring-2 ring-blue-200" : isAnswered ? "bg-green-100 text-green-700 border border-green-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                }`}
-                            >
-                                {idx + 1}
-                            </button>
-                        );
-                    })}
-                </div>
-                
-                <div className="mt-6 pt-6 border-t border-gray-100 space-y-2">
-                    <div className="flex items-center text-xs text-gray-500">
-                        <span className="w-3 h-3 bg-blue-600 rounded mr-2"></span> Current
-                    </div>
-                    <div className="flex items-center text-xs text-gray-500">
-                        <span className="w-3 h-3 bg-green-100 border border-green-200 rounded mr-2"></span> Answered
-                    </div>
-                     <div className="flex items-center text-xs text-gray-500">
-                        <span className="w-3 h-3 bg-gray-100 rounded mr-2"></span> Not Visited
-                    </div>
-                </div>
+        {/* PALETTE */}
+        <aside className="w-64 bg-gray-50 border-l p-6">
+          <div className="flex items-center gap-2 mb-4 font-medium">
+            <Grid size={16} /> Question Palette
+          </div>
 
-                <div className="mt-4 text-xs text-gray-400 text-center">
-                   🔒 Tabs: {tabSwitches}
-                </div>
-            </div>
-        </div>
+          <div className="grid grid-cols-5 gap-3">
+            {questions.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentQIndex(i)}
+                className={`w-10 h-10 rounded-md text-sm ${getStatusClass(i)}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
 
-      </main>
+      {/* FOOTER */}
+      <footer className="h-16 bg-white border-t px-6 flex justify-between items-center">
+        <button
+          onClick={() => setCurrentQIndex((i) => Math.max(0, i - 1))}
+          disabled={currentQIndex === 0}
+          className="flex items-center gap-2 text-gray-600 disabled:opacity-50"
+        >
+          <ChevronLeft /> Previous
+        </button>
+
+        <button
+          onClick={() =>
+            setCurrentQIndex((i) => Math.min(questions.length - 1, i + 1))
+          }
+          className="flex items-center gap-2 bg-gray-900 text-white px-6 py-2 rounded-md"
+        >
+          Next <ChevronRight />
+        </button>
+      </footer>
     </div>
   );
 }

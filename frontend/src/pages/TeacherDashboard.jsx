@@ -1,9 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
+import { useNavigate } from "react-router-dom"; 
 import toast from "react-hot-toast";
-import { TableSkeleton } from "../components/Skeleton";
+import Skeleton from "../components/Skeleton.jsx"; 
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -19,7 +18,10 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from "recharts";
+
+const COLORS = ["#10B981", "#EF4444", "#3B82F6", "#F59E0B"]; 
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -57,12 +59,10 @@ export default function TeacherDashboard() {
 
       const newActivity = res.data.recentActivity || [];
 
-      // Activate live tracking on first submission
       if (!liveTracking && newActivity.length > 0) {
         setLiveTracking(true);
       }
 
-      // Prevent toast on first load
       if (prevActivityRef.current.length > 0 && newActivity.length > 0) {
         const prevLatest = prevActivityRef.current[0]?.id;
         const newLatest = newActivity[0]?.id;
@@ -84,7 +84,7 @@ export default function TeacherDashboard() {
 
   const fetchExamAnalytics = async () => {
     try {
-      setLoadingAnalytics(true); // ✅ add this
+      setLoadingAnalytics(true); 
       const token = localStorage.getItem("token");
       const res = await axios.get(
         "http://localhost:5000/api/analytics/teacher/exams",
@@ -96,7 +96,7 @@ export default function TeacherDashboard() {
     } catch {
       toast.error("Failed to load exam analytics");
     } finally {
-      setLoadingAnalytics(false); // ✅ safer
+      setLoadingAnalytics(false); 
     }
   };
 
@@ -132,169 +132,74 @@ export default function TeacherDashboard() {
       );
 
       const { examTitle, results } = res.data;
-
-      // Convert JSON to worksheet (DECLARE ONCE)
       const worksheet = XLSX.utils.json_to_sheet(results);
-
-      const headerStyle = {
-        font: { bold: true },
-        alignment: { horizontal: "center" },
-        fill: {
-          fgColor: { rgb: "E3F2FD" }, // light blue
-        },
-      };
-
-      // Apply header style
-      const headers = Object.keys(results[0] || {});
-      headers.forEach((_, index) => {
-        const cell = worksheet[XLSX.utils.encode_cell({ r: 0, c: index })];
-        if (cell) cell.s = headerStyle;
-      });
-
-      results.forEach((_, rowIndex) => {
-        [2, 3, 4, 6].forEach((colIndex) => {
-          const cell =
-            worksheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex })];
-          if (cell) {
-            cell.s = { alignment: { horizontal: "center" } };
-          }
-        });
-      });
-
-      // Auto column width
-      const cols = Object.keys(results[0] || {}).map(() => ({ wch: 20 }));
-      worksheet["!cols"] = cols;
-
-      // Create workbook
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Results");
-
-      // Export file
-      const excelBuffer = XLSX.write(workbook, {
-        bookType: "xlsx",
-        type: "array",
-      });
-
-      const file = new Blob([excelBuffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-
+      const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      const file = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       saveAs(file, `${examTitle}_Results.xlsx`);
       toast.success("Excel exported successfully");
     } catch (err) {
-      console.error("Export error:", err);
       toast.error("Failed to export results");
     }
   };
-
-  const exportResultsPDF = async (examId) => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(
-        `http://localhost:5000/api/exams/${examId}/results`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      const { examTitle, results } = res.data;
-
-      const doc = new jsPDF();
-
-      // Title
-      doc.setFontSize(16);
-      doc.text(`Exam Results: ${examTitle}`, 14, 15);
-
-      // Table
-      const tableColumn = [
-        "Name",
-        "Email",
-        "Score",
-        "Total",
-        "Percentage",
-        "Result",
-        "Tab Switches",
-      ];
-
-      const tableRows = results.map((r) => [
-        r.name,
-        r.email,
-        r.score,
-        r.totalScore,
-        `${r.percentage}%`,
-        r.result,
-        r.tabSwitchCount,
-      ]);
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 25,
-        styles: { fontSize: 9 },
-        headStyles: { fillColor: [41, 128, 185] },
-      });
-
-      doc.save(`${examTitle}_Results.pdf`);
-      toast.success("PDF exported successfully");
-    } catch (err) {
-      console.error("PDF export error:", err);
-      toast.error("Failed to export PDF");
-    }
-  };
-
-  
-  /* ============================
-      EFFECTS
-  ============================ */
 
   useEffect(() => {
     fetchStats();
     fetchExamAnalytics();
   }, []);
 
-  //Conditional live polling
   useEffect(() => {
-  if (!liveTracking) return;
-
-  const interval = setInterval(fetchStats, 10000);
-  return () => clearInterval(interval);
-}, [liveTracking]);
+    if (!liveTracking) return;
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, [liveTracking]);
 
   /* ============================
-      SORTING & CHART DATA
+      COMPUTED DATA
   ============================ */
 
-  const sortedAnalytics = [...examAnalytics].sort((a, b) => {
-    if (sortBy === "attempts") return b.attempts - a.attempts;
-    if (sortBy === "passRate") return b.passRate - a.passRate;
-    return 0;
-  });
+  const sortedAnalytics = useMemo(() => {
+    return [...examAnalytics].sort((a, b) => {
+      if (sortBy === "attempts") return b.attempts - a.attempts;
+      if (sortBy === "passRate") return b.passRate - a.passRate;
+      return 0;
+    });
+  }, [examAnalytics, sortBy]);
+
+  const insights = useMemo(() => {
+    if (examAnalytics.length === 0) return null;
+    
+    const totalAttempts = examAnalytics.reduce((acc, curr) => acc + curr.attempts, 0);
+    const totalPassed = examAnalytics.reduce((acc, curr) => acc + (curr.passCount || 0), 0);
+    const totalFailed = examAnalytics.reduce((acc, curr) => acc + (curr.failCount || 0), 0);
+
+    const hardestExam = [...examAnalytics].sort((a,b) => a.passRate - b.passRate)[0];
+    const easiestExam = [...examAnalytics].sort((a,b) => b.passRate - a.passRate)[0];
+
+    return { totalAttempts, totalPassed, totalFailed, hardestExam, easiestExam };
+  }, [examAnalytics]);
 
   const barChartData = sortedAnalytics.map((exam) => ({
     name: exam.title,
     avgScore: exam.avgScore,
   }));
 
-  const pieChartData = [
-    {
-      name: "Pass",
-      value: sortedAnalytics.filter((e) => e.passRate >= 35).length,
-    },
-    {
-      name: "Fail",
-      value: sortedAnalytics.filter((e) => e.passRate < 35).length,
-    },
-  ];
+  const pieChartData = insights ? [
+    { name: "Passed", value: insights.totalPassed },
+    { name: "Failed", value: insights.totalFailed },
+  ] : [];
 
   /* ============================
-      UI
+      UI RENDER
   ============================ */
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      <Navbar />
+      
 
       <div className="max-w-7xl mx-auto px-6 py-10">
+        
         {/* HEADER */}
         <div className="flex justify-between items-center mb-10">
           <div>
@@ -302,122 +207,117 @@ export default function TeacherDashboard() {
               Hello, {userName} 👋
             </h1>
             <p className="text-gray-500 mt-1">
-              Here is what's happening in your classes.
+              Live dashboard overview.
             </p>
           </div>
           <button
             onClick={() => navigate("/create-exam")}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition"
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2"
           >
-            + Create New Exam
+            <span>+</span> Create New Exam
           </button>
         </div>
 
-        {/* STATS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <StatCard title="Total Exams" value={stats.totalExams} icon="📚" />
-          <StatCard
-            title="Students Active"
-            value={stats.totalStudents}
-            icon="👥"
-          />
-          <StatCard title="System Status" value="Live" icon="⚡" />
+        {/* 📊 MAIN STATS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+          <StatCard title="Total Exams" value={stats.totalExams} icon="📚" color="blue" />
+          <StatCard title="Active Students" value={stats.totalStudents} icon="👥" color="purple" />
+          <StatCard title="Total Attempts" value={insights?.totalAttempts || 0} icon="📝" color="orange" />
+          <StatCard title="System Status" value="Live 🟢" icon="⚡" color="green" />
         </div>
 
-        {/* ANALYTICS TABLE */}
+        {/* 🧠 INSIGHTS ALERTS */}
+        {insights && insights.totalAttempts > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center gap-4">
+                    <div className="bg-red-100 p-2 rounded-lg text-2xl">🔥</div>
+                    <div>
+                        <p className="text-xs font-bold text-red-500 uppercase tracking-wide">Needs Attention (Hardest Exam)</p>
+                        <p className="text-red-900 font-bold">{insights.hardestExam.title}</p>
+                        <p className="text-red-700 text-xs">Pass Rate: {insights.hardestExam.passRate}%</p>
+                    </div>
+                </div>
+                <div className="bg-green-50 border border-green-100 p-4 rounded-xl flex items-center gap-4">
+                    <div className="bg-green-100 p-2 rounded-lg text-2xl">🏆</div>
+                    <div>
+                        <p className="text-xs font-bold text-green-500 uppercase tracking-wide">Top Performer (Easiest Exam)</p>
+                        <p className="text-green-900 font-bold">{insights.easiestExam.title}</p>
+                        <p className="text-green-700 text-xs">Avg Score: {insights.easiestExam.avgScore}</p>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* ANALYTICS TABLE & CHARTS */}
         <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="p-6 border-b flex justify-between items-center">
-            <h3 className="text-xl font-bold">Exam Analytics</h3>
+          <div className="p-6 border-b flex justify-between items-center bg-gray-50/50">
+            <h3 className="text-xl font-bold text-gray-800">Exam Analytics</h3>
 
             <div className="flex gap-4 items-center text-sm">
-              <button
-                onClick={fetchExamAnalytics}
-                className="font-medium text-blue-600 hover:text-blue-800 underline"
-              >
+              <button onClick={fetchExamAnalytics} className="font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg transition">
                 🔄 Refresh
               </button>
-              <button
-                onClick={() => setSortBy("attempts")}
-                className="underline"
+              <select 
+                className="bg-white border border-gray-300 text-gray-700 py-1 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
               >
-                Sort by Attempts
-              </button>
-              <button
-                onClick={() => setSortBy("passRate")}
-                className="underline"
-              >
-                Sort by Pass %
-              </button>
+                <option value="attempts">Sort by Attempts</option>
+                <option value="passRate">Sort by Pass Rate</option>
+              </select>
             </div>
           </div>
 
           {loadingAnalytics ? (
-            <TableSkeleton />
+            <Skeleton />
           ) : sortedAnalytics.length === 0 ? (
             <div className="p-10 text-center text-gray-400">
               No exams created yet.
             </div>
           ) : (
             <>
+              {/* TABLE */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 uppercase">
+                  <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold tracking-wider">
                     <tr>
-                      <th className="p-4 text-left">Exam</th>
+                      <th className="p-4 text-left">Exam Title</th>
                       <th className="p-4 text-center">Attempts</th>
-                      <th className="p-4 text-center">Avg</th>
-                      <th className="p-4 text-center">Pass %</th>
+                      <th className="p-4 text-center">Avg Score</th>
+                      <th className="p-4 text-center">Pass Rate</th>
                       <th className="p-4 text-center">Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-100">
                     {sortedAnalytics.map((exam) => (
-                      <tr
-                        key={exam.examId}
-                        className="border-t hover:bg-gray-50"
-                      >
-                        <td className="p-4 font-medium">{exam.title}</td>
-                        <td className="p-4 text-center">{exam.attempts}</td>
+                      <tr key={exam.examId} className="hover:bg-gray-50 transition">
+                        <td className="p-4 font-bold text-gray-700">{exam.title}</td>
+                        <td className="p-4 text-center text-gray-600">{exam.attempts}</td>
+                        <td className="p-4 text-center font-mono font-medium">{exam.attempts === 0 ? "—" : exam.avgScore}</td>
                         <td className="p-4 text-center">
-                          {exam.attempts === 0 ? "—" : exam.avgScore}
-                        </td>
-                        <td className="p-4 text-center">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              exam.passRate >= 60
-                                ? "bg-green-100 text-green-700"
-                                : exam.passRate >= 35
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {exam.passRate}%
-                          </span>
+                          <div className="flex items-center justify-center gap-2">
+                             <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full ${exam.passRate >= 60 ? 'bg-green-500' : exam.passRate >= 35 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{width: `${exam.passRate}%`}}></div>
+                             </div>
+                             <span className="text-xs font-bold">{exam.passRate}%</span>
+                          </div>
                         </td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center gap-2">
                             <button
-                              className="px-3 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg"
-                              onClick={() =>
-                                navigate(`/teacher/exams/${exam.examId}`)
-                              }
+                              className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                              onClick={() => navigate(`/teacher/exams/${exam.examId}`)}
                             >
                               View
                             </button>
                             <button
-                              className="px-3 py-1 text-xs bg-green-50 text-green-700 rounded-lg"
+                              className="px-3 py-1.5 text-xs font-bold bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition"
                               onClick={() => exportResults(exam.examId)}
                             >
-                              Excel
+                              XLSX
                             </button>
                             <button
-                              className="px-3 py-1 text-xs bg-purple-50 text-purple-700 rounded-lg"
-                              onClick={() => exportResultsPDF(exam.examId)}
-                            >
-                              PDF
-                            </button>
-                            <button
-                              className="px-3 py-1 text-xs bg-red-50 text-red-700 rounded-lg"
+                              className="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
                               onClick={() => deleteExam(exam.examId)}
                             >
                               Delete
@@ -430,25 +330,28 @@ export default function TeacherDashboard() {
                 </table>
               </div>
 
-              {/* CHARTS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10 p-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                  <h4 className="text-lg font-bold mb-4">
-                    Average Score per Exam
+              {/* CHARTS SECTION */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 border-t bg-gray-50/30">
+                
+                {/* Bar Chart */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <h4 className="text-gray-800 font-bold mb-6 flex items-center gap-2">
+                    <span className="bg-blue-100 p-1 rounded text-blue-600">📊</span> Average Scores
                   </h4>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={barChartData}>
-                      <XAxis dataKey="name" />
+                      <XAxis dataKey="name" tick={{fontSize: 12}} interval={0} />
                       <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="avgScore" />
+                      <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                      <Bar dataKey="avgScore" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={40} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                  <h4 className="text-lg font-bold mb-4">
-                    Overall Pass vs Fail
+                {/* Pie Chart */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <h4 className="text-gray-800 font-bold mb-6 flex items-center gap-2">
+                    <span className="bg-purple-100 p-1 rounded text-purple-600">🍰</span> Overall Pass/Fail Ratio
                   </h4>
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
@@ -456,13 +359,18 @@ export default function TeacherDashboard() {
                         data={pieChartData}
                         dataKey="value"
                         nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
                         outerRadius={100}
-                        label
+                        paddingAngle={5}
                       >
-                        <Cell />
-                        <Cell />
+                        {pieChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.name === "Passed" ? "#10B981" : "#EF4444"} />
+                        ))}
                       </Pie>
                       <Tooltip />
+                      <Legend verticalAlign="bottom" height={36}/>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -478,58 +386,50 @@ export default function TeacherDashboard() {
   );
 }
 
-/* ============================
-   SMALL COMPONENTS
-============================ */
+const StatCard = ({ title, value, icon, color }) => {
+    const colorClasses = {
+        blue: "bg-blue-50 text-blue-600",
+        purple: "bg-purple-50 text-purple-600",
+        orange: "bg-orange-50 text-orange-600",
+        green: "bg-green-50 text-green-600",
+    };
 
-const StatCard = ({ title, value, icon }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border flex items-center gap-4">
-    <div className="p-4 bg-gray-100 rounded-xl text-2xl">{icon}</div>
-    <div>
-      <p className="text-gray-500 text-sm font-bold uppercase">{title}</p>
-      <h3 className="text-3xl font-bold">{value}</h3>
-    </div>
-  </div>
-);
+    return (
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 transition hover:shadow-md">
+            <div className={`p-4 rounded-xl text-2xl ${colorClasses[color] || "bg-gray-100"}`}>
+                {icon}
+            </div>
+            <div>
+                <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">{title}</p>
+                <h3 className="text-3xl font-extrabold text-gray-800">{value}</h3>
+            </div>
+        </div>
+    );
+};
 
 const RecentActivity = ({ activity }) => (
   <div className="bg-white rounded-2xl shadow-sm border mt-10 overflow-hidden">
-    
-    {/* Header */}
-    <div className="p-6 border-b">
-      <h3 className="text-xl font-bold">Recent Activity</h3>
+    <div className="p-6 border-b bg-gray-50/50">
+      <h3 className="text-lg font-bold text-gray-800">Recent Submissions</h3>
     </div>
-
-    {/* Scrollable body */}
-    <div className="max-h-[320px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-10">
+    <div className="max-h-[320px] overflow-y-auto">
       {activity.length === 0 ? (
-        <div className="p-8 text-center text-gray-400">
-          🕒 Waiting for students to submit exams…
+        <div className="p-10 text-center text-gray-400 italic">
+          No recent activity... yet.
         </div>
       ) : (
         activity.map((sub) => (
-          <div
-            key={sub.id}
-            className="p-6 flex justify-between items-center border-b last:border-b-0 hover:bg-gray-50"
-          >
-            <p>
-              <b>{sub.student.name}</b> submitted{" "}
-              <span className="text-blue-600">{sub.exam.title}</span>
-            </p>
-
-            <span
-              className={`font-bold ${
-                sub.score / sub.totalScore >= 0.35
-                  ? "text-green-600"
-                  : "text-red-600"
-              }`}
-            >
-              {sub.score}/{sub.totalScore}
-            </span>
+          <div key={sub.id} className="p-5 flex justify-between items-center border-b last:border-b-0 hover:bg-gray-50 transition">
+            <div>
+                <p className="font-medium text-gray-800">{sub.student.name}</p>
+                <p className="text-sm text-gray-500">Submitted <span className="font-bold text-blue-600">{sub.exam.title}</span></p>
+            </div>
+            <div className={`px-4 py-2 rounded-lg font-bold text-sm ${sub.score / sub.totalScore >= 0.35 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+              {sub.score} / {sub.totalScore}
+            </div>
           </div>
         ))
       )}
     </div>
   </div>
 );
-
