@@ -35,13 +35,15 @@ model Exam {
 }
 
 model Question {
-  id            Int    @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
+  type          String   @default("MCQ") // <--- REQUIRED: Distinguishes MCQ vs CODE
   text          String
   options       String[]   
-  correctOption Int    
-  marks         Int    @default(1)
+  correctOption Int?     // <--- REQUIRED: Must be optional (Int?) because Coding Qs don't have it
+  testCases     Json?    // <--- REQUIRED: Stores inputs/outputs for coding
+  marks         Int      @default(1)
   examId        Int
-  exam          Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 model Submission {
@@ -49,13 +51,11 @@ model Submission {
   studentId      Int
   examId         Int
   score          Int
-  totalScore     Int      @default(0) // <--- Added this field!
+  totalScore     Int      @default(0) 
   tabSwitchCount Int      @default(0) 
   completedAt    DateTime @default(now())
-  answers  Json?
+  answers        Json?
    
   student User @relation(fields: [studentId], references: [id])
   exam    Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
-
-// Deleted "model Result" because "model Submission" does the same job!
