@@ -34,7 +34,7 @@ exports.uploadQuestions = async (req, res) => {
     }
 
     console.log(`📂 Processing ${data.length} rows...`);
-    
+
     // Debug: Print first row headers
     console.log("🔍 Headers found:", Object.keys(normalizeRow(data[0])));
 
@@ -46,7 +46,7 @@ exports.uploadQuestions = async (req, res) => {
       // Get Type (Default to MCQ if empty)
       const rawType = row["Type"] ? String(row["Type"]).trim().toUpperCase() : "MCQ";
       const marks = row["Marks"] ? parseInt(row["Marks"]) : 1;
-      
+
       const commonData = {
         examId: parseInt(examId),
         marks: marks,
@@ -55,8 +55,8 @@ exports.uploadQuestions = async (req, res) => {
       // === LOGIC FOR CODE QUESTIONS ===
       if (rawType === "CODE") {
         const problemDesc = row["Problem Description"];
-        const inputFmt = row["Input Format"];
-        
+
+
         // Strict Check
         if (!problemDesc) {
           console.warn(`❌ Skipping Row ${rowNum} [CODE]: Missing 'Problem Description'`);
@@ -74,7 +74,7 @@ exports.uploadQuestions = async (req, res) => {
             }
             parsedTestCases = JSON.parse(jsonStr);
           }
-        } catch (e) {
+        } catch {
           console.warn(`⚠️ Row ${rowNum}: Invalid JSON in 'Test Cases' - saving empty array.`);
         }
 
@@ -89,13 +89,13 @@ exports.uploadQuestions = async (req, res) => {
           testCases: parsedTestCases,
           maxMarks: marks
         };
-      } 
-      
+      }
+
       // === LOGIC FOR MCQ QUESTIONS ===
       else {
         const qText = row["Question"];
         const optA = row["Option 1"];
-        
+
         if (!qText || !optA) {
           console.warn(`❌ Skipping Row ${rowNum} [MCQ]: Missing 'Question' or 'Option 1'`);
           return null;
@@ -104,14 +104,14 @@ exports.uploadQuestions = async (req, res) => {
         // Handle Correct Option (allows "Option B", "2", or 2)
         let correctVal = row["Correct Option Number"];
         let correctIndex = 0;
-        
+
         if (correctVal) {
-           const valStr = String(correctVal).trim().toLowerCase();
-           if (valStr.includes("option a") || valStr === "1") correctIndex = 0;
-           else if (valStr.includes("option b") || valStr === "2") correctIndex = 1;
-           else if (valStr.includes("option c") || valStr === "3") correctIndex = 2;
-           else if (valStr.includes("option d") || valStr === "4") correctIndex = 3;
-           else correctIndex = parseInt(correctVal) - 1 || 0;
+          const valStr = String(correctVal).trim().toLowerCase();
+          if (valStr.includes("option a") || valStr === "1") correctIndex = 0;
+          else if (valStr.includes("option b") || valStr === "2") correctIndex = 1;
+          else if (valStr.includes("option c") || valStr === "3") correctIndex = 2;
+          else if (valStr.includes("option d") || valStr === "4") correctIndex = 3;
+          else correctIndex = parseInt(correctVal) - 1 || 0;
         }
 
         return {
@@ -132,9 +132,9 @@ exports.uploadQuestions = async (req, res) => {
     // 3. Final Check before DB Insert
     if (questionsToInsert.length === 0) {
       console.error("❌ No valid questions passed validation.");
-      return res.status(400).json({ 
-        error: "No valid questions found in file.", 
-        details: "Check server console for row-by-row validation errors." 
+      return res.status(400).json({
+        error: "No valid questions found in file.",
+        details: "Check server console for row-by-row validation errors."
       });
     }
 
@@ -145,8 +145,8 @@ exports.uploadQuestions = async (req, res) => {
       data: questionsToInsert,
     });
 
-    res.status(201).json({ 
-      message: "Questions uploaded successfully!", 
+    res.status(201).json({
+      message: "Questions uploaded successfully!",
       count: result.count,
     });
 
@@ -179,7 +179,7 @@ exports.getAllQuestions = async (req, res) => {
     }
 
     res.json(questions);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to fetch questions" });
   }
 };

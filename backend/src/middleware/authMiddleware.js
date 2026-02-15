@@ -13,7 +13,7 @@ const authenticateToken = (req, res, next) => {
     const verified = jwt.verify(token, process.env.SECRET_KEY);
     req.user = verified; // { userId: 1, role: 'TEACHER' }
     next();
-  } catch (err) {
+  } catch {
     res.status(403).json({ error: "Invalid Token" });
   }
 };

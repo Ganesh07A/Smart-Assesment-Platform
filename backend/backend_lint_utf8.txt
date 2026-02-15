@@ -1,0 +1,25 @@
+﻿
+> backend@1.0.0 lint D:\MINI PROJECT II\Smart-Assesment-Platform\backend
+> eslint .
+
+
+D:\MINI PROJECT II\Smart-Assesment-Platform\backend\src\controllers\authController.js
+  6:7  warning  'SECRET_KEY' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+D:\MINI PROJECT II\Smart-Assesment-Platform\backend\src\controllers\examController.js
+   52:12  warning  'err' is defined but never used  no-unused-vars
+  241:12  warning  'err' is defined but never used  no-unused-vars
+  287:12  warning  'err' is defined but never used  no-unused-vars
+  307:12  warning  'err' is defined but never used  no-unused-vars
+  343:11  warning  'err' is defined but never used  no-unused-vars
+
+D:\MINI PROJECT II\Smart-Assesment-Platform\backend\src\controllers\questionController.js
+   58:15  warning  'inputFmt' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+   77:18  warning  'e' is defined but never used                                                        no-unused-vars
+  182:12  warning  'err' is defined but never used                                                      no-unused-vars
+
+D:\MINI PROJECT II\Smart-Assesment-Platform\backend\src\middleware\authMiddleware.js
+  16:12  warning  'err' is defined but never used  no-unused-vars
+
+Γ£û 10 problems (0 errors, 10 warnings)
+

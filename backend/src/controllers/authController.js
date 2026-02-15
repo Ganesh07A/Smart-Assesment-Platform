@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const prisma = new PrismaClient();
-const SECRET_KEY = process.env.SECRET_KEY || "lnbviuregalriufbcrgegrnvserghy";
+
 
 //regiser user
 exports.register = async (req, res) => {
@@ -34,14 +34,14 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     // 1. Only extract email and password (ignore role from frontend)
-    const { email, password } = req.body; 
-    
+    const { email, password } = req.body;
+
     console.log("---- LOGIN ATTEMPT ----");
     console.log("📥 Email:", email);
 
     // 2. Check if user exists
     const user = await prisma.user.findUnique({ where: { email } });
-    
+
     if (!user) {
       console.log("❌ Error: User not found");
       return res.status(400).json({ error: "User not found" });
@@ -73,7 +73,7 @@ exports.login = async (req, res) => {
     );
 
     console.log("✅ Login Successful!");
-    
+
     // Send back the role so the frontend knows where to redirect
     res.json({ token, role: user.role, name: user.name });
 
