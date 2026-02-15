@@ -2,25 +2,44 @@ import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import Papa from "papaparse"; 
-import * as XLSX from "xlsx"; 
-import { Plus, Trash2, Code, List, FileSpreadsheet } from "lucide-react"; 
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
+import {
+  Plus,
+  Trash2,
+  Code,
+  List,
+  FileSpreadsheet,
+  Clock,
+  Award,
+  Percent,
+  UploadCloud,
+  Download,
+  Info,
+  Send,
+  Save,
+  CheckCircle2,
+  Image as ImageIcon,
+  Sigma
+} from "lucide-react";
+import DashboardLayout from "../components/DashboardLayout";
 
 export default function CreateExam() {
   const navigate = useNavigate();
-  
+
   const [examData, setExamData] = useState({
     title: "",
     description: "",
     duration: 30,
+    totalMarks: 100,
+    passingScore: 40
   });
 
-  // 🏗️ UPDATED: Question Structure includes 'type' and 'testCases'
   const [questions, setQuestions] = useState([
-    { 
+    {
       type: "MCQ", // Default
-      text: "", 
-      options: ["", "", "", ""], 
+      text: "",
+      options: ["", "", "", ""],
       correctOption: 0,
       marks: 1,
       testCases: [{ input: "", output: "" }] // For Coding Qs
@@ -65,14 +84,14 @@ export default function CreateExam() {
 
   const addQuestion = () => {
     setQuestions([
-      ...questions, 
-      { 
-        type: "MCQ", 
-        text: "", 
-        options: ["", "", "", ""], 
-        correctOption: 0, 
+      ...questions,
+      {
+        type: "MCQ",
+        text: "",
+        options: ["", "", "", ""],
+        correctOption: 0,
         marks: 1,
-        testCases: [{ input: "", output: "" }] 
+        testCases: [{ input: "", output: "" }]
       }
     ]);
   };
@@ -87,43 +106,43 @@ export default function CreateExam() {
     try {
       let validCount = 0;
       const importedQuestions = jsonData.map((row) => {
-          const getVal = (key) => {
-             const foundKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
-             return foundKey ? row[foundKey] : null;
-          };
+        const getVal = (key) => {
+          const foundKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
+          return foundKey ? row[foundKey] : null;
+        };
 
-          const qText = getVal("question");
-          const optA = getVal("option a");
-          const optB = getVal("option b");
-          const optC = getVal("option c");
-          const optD = getVal("option d");
-          const correctRaw = getVal("correct option");
+        const qText = getVal("question");
+        const optA = getVal("option a");
+        const optB = getVal("option b");
+        const optC = getVal("option c");
+        const optD = getVal("option d");
+        const correctRaw = getVal("correct option");
 
-          if (!qText || !optA) return null;
+        if (!qText || !optA) return null;
 
-          const cleanCorrect = correctRaw ? correctRaw.toString().trim().toLowerCase() : "";
-          let correctIndex = 0;
-          
-          if (cleanCorrect === "option a" || cleanCorrect === "a" || cleanCorrect === "1") correctIndex = 0;
-          else if (cleanCorrect === "option b" || cleanCorrect === "b" || cleanCorrect === "2") correctIndex = 1;
-          else if (cleanCorrect === "option c" || cleanCorrect === "c" || cleanCorrect === "3") correctIndex = 2;
-          else if (cleanCorrect === "option d" || cleanCorrect === "d" || cleanCorrect === "4") correctIndex = 3;
+        const cleanCorrect = correctRaw ? correctRaw.toString().trim().toLowerCase() : "";
+        let correctIndex = 0;
 
-          validCount++;
+        if (cleanCorrect === "option a" || cleanCorrect === "a" || cleanCorrect === "1") correctIndex = 0;
+        else if (cleanCorrect === "option b" || cleanCorrect === "b" || cleanCorrect === "2") correctIndex = 1;
+        else if (cleanCorrect === "option c" || cleanCorrect === "c" || cleanCorrect === "3") correctIndex = 2;
+        else if (cleanCorrect === "option d" || cleanCorrect === "d" || cleanCorrect === "4") correctIndex = 3;
 
-          return {
-            type: "MCQ", // Excel import defaults to MCQ
-            text: qText,
-            options: [
-              optA.toString(), 
-              optB ? optB.toString() : "", 
-              optC ? optC.toString() : "", 
-              optD ? optD.toString() : ""
-            ],
-            correctOption: correctIndex,
-            marks: 1,
-            testCases: []
-          };
+        validCount++;
+
+        return {
+          type: "MCQ", // Excel import defaults to MCQ
+          text: qText,
+          options: [
+            optA.toString(),
+            optB ? optB.toString() : "",
+            optC ? optC.toString() : "",
+            optD ? optD.toString() : ""
+          ],
+          correctOption: correctIndex,
+          marks: 1,
+          testCases: []
+        };
       }).filter(q => q !== null);
 
       if (importedQuestions.length === 0) {
@@ -133,7 +152,7 @@ export default function CreateExam() {
 
       setQuestions((prev) => [...prev, ...importedQuestions]);
       toast.success(`Loaded ${validCount} questions successfully!`);
-      
+
     } catch (err) {
       console.error(err);
       toast.error("Error processing file data");
@@ -153,7 +172,7 @@ export default function CreateExam() {
         complete: (results) => processImportedData(results.data),
         error: () => toast.error("Failed to parse CSV"),
       });
-    } 
+    }
     else if (fileExtension === "xlsx" || fileExtension === "xls") {
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -165,7 +184,7 @@ export default function CreateExam() {
         processImportedData(data);
       };
       reader.readAsBinaryString(file);
-    } 
+    }
     else {
       toast.error("Invalid file type. Please upload CSV or Excel.");
     }
@@ -176,7 +195,7 @@ export default function CreateExam() {
     try {
       const token = localStorage.getItem("token");
       if (!examData.title || !examData.description) {
-         return toast.error("Please fill in exam details");
+        return toast.error("Please fill in exam details");
       }
 
       // Filter out empty options if needed, but basic validation is:
@@ -200,169 +219,316 @@ export default function CreateExam() {
     }
   };
 
+  // Calculate dynamic stats
+  const mcqCount = questions.filter(q => q.type === "MCQ").length;
+  const codingCount = questions.filter(q => q.type === "CODE").length;
+
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
-      
-      <div className="max-w-4xl mx-auto p-6">
-        
-        {/* Header */}
-        <div className="flex justify-between items-end mb-8">
+    <DashboardLayout>
+      <div className="max-w-4xl mx-auto space-y-6 pb-24">
+        {/* Header & Basic Info Card */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="h-2 bg-blue-600 w-full"></div>
+          <div className="p-6 md:p-8 space-y-6">
             <div>
-                <h1 className="text-3xl font-bold text-gray-800">Create New Exam</h1>
-                <p className="text-gray-500 mt-2">Set up details and add questions.</p>
+              <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 mb-2">Create New Exam</h2>
+              <p className="text-slate-500 text-sm">Fill in the core details of the assessment below.</p>
             </div>
-            
-            <div className="relative">
-                <input 
-                    type="file" 
-                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Exam Name</label>
+                <input
+                  name="title"
+                  value={examData.title}
+                  onChange={handleExamChange}
+                  className="w-full h-12 px-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                  placeholder="e.g. Advanced Data Structures Midterm"
+                  type="text"
                 />
-                <button className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-green-700 shadow-md flex items-center gap-2 transition active:scale-95">
-                    <FileSpreadsheet size={18} /> Import CSV / Excel
-                </button>
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <input
+                  name="description"
+                  value={examData.description}
+                  onChange={handleExamChange}
+                  className="w-full h-12 px-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                  placeholder="Brief description of the exam content"
+                  type="text"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (minutes)</label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    name="duration"
+                    value={examData.duration}
+                    onChange={handleExamChange}
+                    className="w-full h-12 pl-10 pr-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                    placeholder="60"
+                    type="number"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Total Marks</label>
+                <div className="relative">
+                  <Award className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    name="totalMarks"
+                    value={examData.totalMarks}
+                    onChange={handleExamChange}
+                    className="w-full h-12 pl-10 pr-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                    placeholder="100"
+                    type="number"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Passing Score (%)</label>
+                <div className="relative">
+                  <Percent className="absolute left-3 top-3.5 text-slate-400" size={20} />
+                  <input
+                    name="passingScore"
+                    value={examData.passingScore}
+                    onChange={handleExamChange}
+                    className="w-full h-12 pl-10 pr-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                    placeholder="40"
+                    type="number"
+                  />
+                </div>
+              </div>
             </div>
+          </div>
         </div>
 
-        {/* Exam Details Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 space-y-4">
-            <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Exam Title</label>
-                <input name="title" onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Mid-Term Physics" />
+        {/* Bulk Upload Section */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <FileSpreadsheet className="text-blue-600" size={24} />
+            <h3 className="text-lg font-bold text-slate-900">Bulk Upload Questions</h3>
+          </div>
+
+          <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group">
+            <input
+              type="file"
+              accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+              onChange={handleFileUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+            <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <UploadCloud className="text-blue-600" size={28} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Description</label>
-                    <input name="description" onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Chapters 1-3" />
-                </div>
-                <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Duration (Mins)</label>
-                    <input type="number" name="duration" value={examData.duration} onChange={handleExamChange} className="w-full p-3 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
+            <p className="text-slate-900 font-semibold mb-1">Drag & Drop your CSV/XLSX here</p>
+            <p className="text-slate-500 text-xs mb-4 text-center max-w-xs">Supports up to 500 questions per upload. Make sure to follow the platform template.</p>
+            <span className="text-sm text-blue-600 font-bold hover:underline">or Browse Files</span>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+            <div className="flex items-center gap-3">
+              <Info className="text-blue-600" size={20} />
+              <p className="text-sm text-slate-600 leading-tight">Need help with the format? Download our sample template.</p>
             </div>
+            <button className="whitespace-nowrap flex items-center gap-2 text-sm font-bold text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors">
+              <Download size={18} />
+              Download Template
+            </button>
+          </div>
         </div>
 
         {/* Questions List */}
         <div className="space-y-6">
-            {questions.map((q, qIndex) => (
-                <div key={qIndex} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group transition-all hover:shadow-md">
-                    <div className="absolute top-4 right-4 flex gap-2">
-                        <button onClick={() => removeQuestion(qIndex)} className="text-gray-300 hover:text-red-500 transition p-2">
-                            <Trash2 size={20} />
-                        </button>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 mb-4">
-                        <span className="font-bold text-gray-400 text-sm uppercase">Q{qIndex + 1}</span>
-                        
-                        {/* 🆕 TYPE SELECTOR */}
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
-                            <button 
-                                onClick={() => handleQuestionChange(qIndex, "type", "MCQ")}
-                                className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-2 transition ${q.type === "MCQ" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}
-                            >
-                                <List size={14} /> Multiple Choice
-                            </button>
-                            <button 
-                                onClick={() => handleQuestionChange(qIndex, "type", "CODE")}
-                                className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-2 transition ${q.type === "CODE" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}
-                            >
-                                <Code size={14} /> Coding Challenge
-                            </button>
-                        </div>
-
-                        {/* Marks Input */}
-                        <div className="flex items-center gap-2 ml-auto mr-12">
-                           <label className="text-xs font-bold text-gray-500">Marks:</label>
-                           <input 
-                              type="number" 
-                              value={q.marks} 
-                              onChange={(e) => handleQuestionChange(qIndex, "marks", e.target.value)}
-                              className="w-16 p-1 border rounded text-center text-sm"
-                              min="1"
-                           />
-                        </div>
-                    </div>
-                    
-                    <input 
-                        value={q.text}
-                        onChange={(e) => handleQuestionChange(qIndex, "text", e.target.value)}
-                        className="w-full p-3 border rounded-lg mb-4 font-medium outline-none focus:border-blue-500 bg-gray-50 focus:bg-white transition" 
-                        placeholder={q.type === "MCQ" ? "Enter question text..." : "Enter problem statement..."}
-                    />
-
-                    {/* --- CONDITIONAL UI: MCQ vs CODE --- */}
-                    {q.type === "MCQ" ? (
-                        <div className="grid grid-cols-2 gap-4">
-                            {q.options.map((opt, oIndex) => (
-                                <div key={oIndex} className={`flex items-center gap-2 p-2 rounded-lg border ${q.correctOption === oIndex ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
-                                    <input 
-                                        type="radio" 
-                                        name={`correct-${qIndex}`} 
-                                        checked={q.correctOption === oIndex}
-                                        onChange={() => handleQuestionChange(qIndex, "correctOption", oIndex)}
-                                        className="accent-green-600 w-5 h-5 cursor-pointer"
-                                    />
-                                    <input 
-                                        value={opt}
-                                        onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
-                                        className="w-full bg-transparent outline-none text-sm" 
-                                        placeholder={`Option ${oIndex + 1}`}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="bg-gray-900 p-4 rounded-xl border border-gray-800">
-                            <div className="flex justify-between items-center mb-2 text-gray-400 text-xs font-bold uppercase tracking-wider">
-                                <span>Test Cases (Input / Expected Output)</span>
-                                <button onClick={() => addTestCase(qIndex)} className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                                    <Plus size={14} /> Add Case
-                                </button>
-                            </div>
-                            
-                            <div className="space-y-3">
-                                {q.testCases.map((tc, tIndex) => (
-                                    <div key={tIndex} className="flex gap-2">
-                                        <input 
-                                            value={tc.input}
-                                            onChange={(e) => handleTestCaseChange(qIndex, tIndex, "input", e.target.value)}
-                                            className="flex-1 p-2 rounded bg-gray-800 border border-gray-700 text-white text-sm font-mono placeholder-gray-600 outline-none focus:border-blue-500"
-                                            placeholder="Input (e.g. 1 5)"
-                                        />
-                                        <input 
-                                            value={tc.output}
-                                            onChange={(e) => handleTestCaseChange(qIndex, tIndex, "output", e.target.value)}
-                                            className="flex-1 p-2 rounded bg-gray-800 border border-gray-700 text-white text-sm font-mono placeholder-gray-600 outline-none focus:border-green-500"
-                                            placeholder="Expected Output (e.g. 6)"
-                                        />
-                                        <button onClick={() => removeTestCase(qIndex, tIndex)} className="text-gray-500 hover:text-red-400 p-2">
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                            <p className="text-xs text-gray-500 mt-2">
-                                * Students' code will be run against these inputs. If their output matches exactly, they get marks.
-                            </p>
-                        </div>
-                    )}
+          {questions.map((q, qIndex) => (
+            <div key={qIndex} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 space-y-6 relative border-l-4 border-l-blue-600">
+              <div className="flex justify-between items-start">
+                <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full uppercase tracking-wider">
+                  Question {qIndex + 1}
+                </span>
+                <div className="flex items-center">
+                  {/* Type Toggle per Question */}
+                  <div className="inline-flex p-1 bg-slate-100 rounded-xl mr-4">
+                    <button
+                      onClick={() => handleQuestionChange(qIndex, "type", "MCQ")}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${q.type === "MCQ" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      <List size={18} /> MCQ
+                    </button>
+                    <button
+                      onClick={() => handleQuestionChange(qIndex, "type", "CODE")}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${q.type === "CODE" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      <Code size={18} /> Coding
+                    </button>
+                  </div>
+                  <button onClick={() => removeQuestion(qIndex)} className="text-slate-400 hover:text-red-500 transition-colors p-1">
+                    <Trash2 size={20} />
+                  </button>
                 </div>
-            ))}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Question Text</label>
+                  <textarea
+                    value={q.text}
+                    onChange={(e) => handleQuestionChange(qIndex, "text", e.target.value)}
+                    className="w-full rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all p-4 min-h-[100px] outline-none border"
+                    placeholder={q.type === "MCQ" ? "Enter your question here..." : "Enter problem statement..."}
+                  />
+                </div>
+
+                {/* MCQ Options */}
+                {q.type === "MCQ" ? (
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-slate-700">Options (Select the correct answer)</label>
+                    {q.options.map((opt, oIndex) => (
+                      <div key={oIndex} className="flex items-center gap-3 group">
+                        <input
+                          type="radio"
+                          name={`correct-${qIndex}`}
+                          checked={q.correctOption === oIndex}
+                          onChange={() => handleQuestionChange(qIndex, "correctOption", oIndex)}
+                          className="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <div className={`flex-1 relative ${q.correctOption === oIndex ? "z-10" : ""}`}>
+                          <span className={`absolute left-3 top-2.5 text-xs font-bold ${q.correctOption === oIndex ? "text-blue-600" : "text-slate-400"}`}>
+                            {String.fromCharCode(65 + oIndex)}
+                          </span>
+                          <input
+                            value={opt}
+                            onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
+                            className={`w-full pl-8 pr-4 py-2 rounded-lg border focus:ring-2 transition-all outline-none ${q.correctOption === oIndex
+                              ? "border-blue-600 bg-blue-50/20 ring-2 ring-blue-500/20"
+                              : "border-gray-200 bg-white focus:border-blue-600 focus:ring-blue-500/20"
+                              }`}
+                            placeholder={`Enter option text`}
+                            type="text"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Coding Test Cases */
+                  <div className="bg-slate-900 p-6 rounded-xl border border-slate-800">
+                    <div className="flex justify-between items-center mb-4 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                      <span>Test Cases (Input / Expected Output)</span>
+                      <button onClick={() => addTestCase(qIndex)} className="text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                        <Plus size={14} /> Add Case
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {q.testCases.map((tc, tIndex) => (
+                        <div key={tIndex} className="flex gap-3">
+                          <div className="flex-1 space-y-1">
+                            <span className="text-[10px] text-slate-500 font-mono">Input</span>
+                            <input
+                              value={tc.input}
+                              onChange={(e) => handleTestCaseChange(qIndex, tIndex, "input", e.target.value)}
+                              className="w-full p-2.5 rounded bg-slate-800 border border-slate-700 text-white text-sm font-mono placeholder-slate-600 outline-none focus:border-blue-500 transition-colors"
+                              placeholder="e.g. 1 5"
+                            />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <span className="text-[10px] text-slate-500 font-mono">Expected Output</span>
+                            <input
+                              value={tc.output}
+                              onChange={(e) => handleTestCaseChange(qIndex, tIndex, "output", e.target.value)}
+                              className="w-full p-2.5 rounded bg-slate-800 border border-slate-700 text-white text-sm font-mono placeholder-slate-600 outline-none focus:border-green-500 transition-colors"
+                              placeholder="e.g. 6"
+                            />
+                          </div>
+                          <button onClick={() => removeTestCase(qIndex, tIndex)} className="text-slate-500 hover:text-red-400 self-end p-2.5 transition-colors">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-4 flex items-center gap-2">
+                      <Info size={14} />
+                      Students' code will be validated against these test cases.
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                  <div className="flex gap-3">
+                    <button className="text-xs font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                      <ImageIcon size={16} /> Add Image
+                    </button>
+                    <button className="text-xs font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                      <Sigma size={16} /> Add Formula
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-slate-500">Points:</label>
+                    <input
+                      type="number"
+                      value={q.marks}
+                      onChange={(e) => handleQuestionChange(qIndex, "marks", e.target.value)}
+                      className="w-16 h-8 text-xs rounded border border-gray-200 text-center focus:border-blue-600 outline-none transition-colors"
+                      min="1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex gap-4 mt-8 pb-10">
-            <button onClick={addQuestion} className="flex-1 py-3 border-2 border-dashed border-gray-300 text-gray-500 font-bold rounded-xl hover:bg-gray-50 transition flex items-center justify-center gap-2">
-                <Plus size={20} /> Add Question
-            </button>
-            <button onClick={handleSubmit} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition transform hover:-translate-y-1">
-                🚀 Publish Exam
-            </button>
+        {/* Add Question Button */}
+        <div className="flex justify-center py-4">
+          <button
+            onClick={addQuestion}
+            className="group flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-dashed border-gray-300 text-slate-500 hover:border-blue-600 hover:text-blue-600 transition-all font-semibold"
+          >
+            <Plus className="group-hover:rotate-90 transition-transform" size={20} />
+            Add Another Question
+          </button>
+        </div>
+
+        {/* Bottom Action Bar (Fixed) */}
+        <div className="fixed bottom-6 left-0 right-0 z-40 px-4 md:px-0 pointer-events-none">
+          <div className="max-w-4xl mx-auto pointer-events-auto">
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5 text-xs text-green-600 font-bold uppercase tracking-wider">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                    Draft
+                  </div>
+                  <span className="text-slate-400 text-[10px]">Unsaved changes</span>
+                </div>
+                <div className="h-8 w-[1px] bg-slate-100 hidden sm:block"></div>
+                <div className="hidden md:flex flex-col">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Summary</span>
+                  <span className="text-sm font-bold">{mcqCount} MCQ • {codingCount} Coding</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-gray-100 transition-colors">
+                  Save Draft
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="flex-1 sm:flex-none px-8 py-2.5 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <Send size={18} />
+                  Publish Exam
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

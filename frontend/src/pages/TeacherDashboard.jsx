@@ -1,27 +1,34 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; 
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import Skeleton from "../components/Skeleton.jsx"; 
+import Skeleton from "../components/Skeleton.jsx";
+import DashboardLayout from "../components/DashboardLayout.jsx";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 import {
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
 } from "recharts";
 
-const COLORS = ["#10B981", "#EF4444", "#3B82F6", "#F59E0B"]; 
+import {
+  MoreVertical,
+  ArrowUpRight,
+  ArrowDownRight,
+  BookOpen,
+  Users,
+  Activity,
+  BarChart2,
+  Trash2,
+  FileSpreadsheet,
+  Eye,
+  Plus
+} from "lucide-react";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -40,14 +47,14 @@ export default function TeacherDashboard() {
   const [examAnalytics, setExamAnalytics] = useState([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [sortBy, setSortBy] = useState("attempts");
-  const [liveTracking, setLiveTracking ] = useState(false)
+  const [liveTracking, setLiveTracking] = useState(false)
   const prevActivityRef = useRef([]);
 
   /* ============================
       API CALLs
   ============================ */
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
@@ -80,11 +87,11 @@ export default function TeacherDashboard() {
     } catch {
       toast.error("Failed to load dashboard stats");
     }
-  };
+  }, [liveTracking]);
 
-  const fetchExamAnalytics = async () => {
+  const fetchExamAnalytics = useCallback(async () => {
     try {
-      setLoadingAnalytics(true); 
+      setLoadingAnalytics(true);
       const token = localStorage.getItem("token");
       const res = await axios.get(
         "http://localhost:5000/api/analytics/teacher/exams",
@@ -96,9 +103,9 @@ export default function TeacherDashboard() {
     } catch {
       toast.error("Failed to load exam analytics");
     } finally {
-      setLoadingAnalytics(false); 
+      setLoadingAnalytics(false);
     }
-  };
+  }, []);
 
   /* ============================
       ACTIONS
@@ -139,7 +146,7 @@ export default function TeacherDashboard() {
       const file = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       saveAs(file, `${examTitle}_Results.xlsx`);
       toast.success("Excel exported successfully");
-    } catch (err) {
+    } catch {
       toast.error("Failed to export results");
     }
   };
@@ -147,13 +154,13 @@ export default function TeacherDashboard() {
   useEffect(() => {
     fetchStats();
     fetchExamAnalytics();
-  }, []);
+  }, [fetchStats, fetchExamAnalytics]);
 
   useEffect(() => {
     if (!liveTracking) return;
     const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
-  }, [liveTracking]);
+  }, [liveTracking, fetchStats]);
 
   /* ============================
       COMPUTED DATA
@@ -169,267 +176,240 @@ export default function TeacherDashboard() {
 
   const insights = useMemo(() => {
     if (examAnalytics.length === 0) return null;
-    
+
     const totalAttempts = examAnalytics.reduce((acc, curr) => acc + curr.attempts, 0);
     const totalPassed = examAnalytics.reduce((acc, curr) => acc + (curr.passCount || 0), 0);
     const totalFailed = examAnalytics.reduce((acc, curr) => acc + (curr.failCount || 0), 0);
 
-    const hardestExam = [...examAnalytics].sort((a,b) => a.passRate - b.passRate)[0];
-    const easiestExam = [...examAnalytics].sort((a,b) => b.passRate - a.passRate)[0];
+    const hardestExam = [...examAnalytics].sort((a, b) => a.passRate - b.passRate)[0];
+    const easiestExam = [...examAnalytics].sort((a, b) => b.passRate - a.passRate)[0];
 
-    return { totalAttempts, totalPassed, totalFailed, hardestExam, easiestExam };
+    const avgScore = examAnalytics.length > 0
+      ? Math.round(examAnalytics.reduce((acc, curr) => acc + parseFloat(curr.avgScore || 0), 0) / examAnalytics.length)
+      : 0;
+
+    return { totalAttempts, totalPassed, totalFailed, hardestExam, easiestExam, avgScore };
   }, [examAnalytics]);
 
-  const barChartData = sortedAnalytics.map((exam) => ({
+  const chartData = sortedAnalytics.map((exam) => ({
     name: exam.title,
     avgScore: exam.avgScore,
   }));
-
-  const pieChartData = insights ? [
-    { name: "Passed", value: insights.totalPassed },
-    { name: "Failed", value: insights.totalFailed },
-  ] : [];
 
   /* ============================
       UI RENDER
   ============================ */
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
-      
-
-      <div className="max-w-7xl mx-auto px-6 py-10">
-        
-        {/* HEADER */}
-        <div className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800">
-              Hello, {userName} 👋
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Live dashboard overview.
-            </p>
-          </div>
-          <button
-            onClick={() => navigate("/create-exam")}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2"
-          >
-            <span>+</span> Create New Exam
-          </button>
+    <DashboardLayout userName={userName}>
+      {/* Header Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+          <p className="text-slate-500 text-sm mt-1">
+            Welcome back, here's what's happening with your classes.
+          </p>
         </div>
+        <button
+          onClick={() => navigate("/create-exam")}
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm"
+        >
+          <Plus size={20} />
+          Create New Exam
+        </button>
+      </div>
 
-        {/* 📊 MAIN STATS GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-          <StatCard title="Total Exams" value={stats.totalExams} icon="📚" color="blue" />
-          <StatCard title="Active Students" value={stats.totalStudents} icon="👥" color="purple" />
-          <StatCard title="Total Attempts" value={insights?.totalAttempts || 0} icon="📝" color="orange" />
-          <StatCard title="System Status" value="Live 🟢" icon="⚡" color="green" />
-        </div>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard
+          title="Total Exams"
+          value={stats.totalExams}
+          icon={BookOpen}
+          trend="+4%"
+          trendUp={true}
+          color="blue"
+        />
+        <StatCard
+          title="Total Students"
+          value={stats.totalStudents}
+          icon={Users}
+          trend="+12%"
+          trendUp={true}
+          color="purple"
+        />
+        <StatCard
+          title="Active Exams"
+          value={insights?.totalAttempts || 0} // Using total attempts as proxy for activity
+          icon={Activity}
+          customIndicator={<div className="w-2 h-2 bg-blue-500 rounded-full mt-2 animate-pulse"></div>}
+          color="amber"
+          subtitle="Attempts"
+        />
+        <StatCard
+          title="Average Score"
+          value={`${insights?.avgScore || 0}%`}
+          icon={BarChart2}
+          trend="+5.2%"
+          trendUp={true}
+          color="green"
+        />
+      </div>
 
-        {/* 🧠 INSIGHTS ALERTS */}
-        {insights && insights.totalAttempts > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center gap-4">
-                    <div className="bg-red-100 p-2 rounded-lg text-2xl">🔥</div>
-                    <div>
-                        <p className="text-xs font-bold text-red-500 uppercase tracking-wide">Needs Attention (Hardest Exam)</p>
-                        <p className="text-red-900 font-bold">{insights.hardestExam.title}</p>
-                        <p className="text-red-700 text-xs">Pass Rate: {insights.hardestExam.passRate}%</p>
-                    </div>
-                </div>
-                <div className="bg-green-50 border border-green-100 p-4 rounded-xl flex items-center gap-4">
-                    <div className="bg-green-100 p-2 rounded-lg text-2xl">🏆</div>
-                    <div>
-                        <p className="text-xs font-bold text-green-500 uppercase tracking-wide">Top Performer (Easiest Exam)</p>
-                        <p className="text-green-900 font-bold">{insights.easiestExam.title}</p>
-                        <p className="text-green-700 text-xs">Avg Score: {insights.easiestExam.avgScore}</p>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* ANALYTICS TABLE & CHARTS */}
-        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-          <div className="p-6 border-b flex justify-between items-center bg-gray-50/50">
-            <h3 className="text-xl font-bold text-gray-800">Exam Analytics</h3>
-
-            <div className="flex gap-4 items-center text-sm">
-              <button onClick={fetchExamAnalytics} className="font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg transition">
-                🔄 Refresh
-              </button>
-              <select 
-                className="bg-white border border-gray-300 text-gray-700 py-1 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Exams Table */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-white">
+            <h3 className="font-bold text-slate-900">Recent Exams</h3>
+            <div className="flex gap-2">
+              <select
+                className="bg-gray-50 border border-gray-300 text-gray-700 py-1 px-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
               >
                 <option value="attempts">Sort by Attempts</option>
                 <option value="passRate">Sort by Pass Rate</option>
               </select>
+              <button onClick={fetchExamAnalytics} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition">
+                <Activity size={16} />
+              </button>
             </div>
           </div>
 
-          {loadingAnalytics ? (
-            <Skeleton />
-          ) : sortedAnalytics.length === 0 ? (
-            <div className="p-10 text-center text-gray-400">
-              No exams created yet.
-            </div>
-          ) : (
-            <>
-              {/* TABLE */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold tracking-wider">
-                    <tr>
-                      <th className="p-4 text-left">Exam Title</th>
-                      <th className="p-4 text-center">Attempts</th>
-                      <th className="p-4 text-center">Avg Score</th>
-                      <th className="p-4 text-center">Pass Rate</th>
-                      <th className="p-4 text-center">Actions</th>
+          <div className="overflow-x-auto">
+            {loadingAnalytics ? (
+              <div className="p-6"><Skeleton /></div>
+            ) : sortedAnalytics.length === 0 ? (
+              <div className="p-10 text-center text-gray-400 italic">No exams created yet.</div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50">
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Exam Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Attempts</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sortedAnalytics.map((exam) => (
+                    <tr key={exam.examId} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-semibold text-slate-900">{exam.title}</p>
+                        <p className="text-xs text-slate-500">ID: {String(exam.examId || "").substring(0, 8)}...</p>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {exam.attempts}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${exam.passRate >= 60 ? "bg-green-100 text-green-800" :
+                          exam.passRate >= 35 ? "bg-yellow-100 text-yellow-800" :
+                            "bg-red-100 text-red-800"
+                          }`}>
+                          {exam.passRate}% Pass Rate
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => navigate(`/teacher/exams/${exam.examId}`)}
+                            className="text-slate-400 hover:text-blue-600 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye size={18} />
+                          </button>
+                          <button
+                            onClick={() => exportResults(exam.examId)}
+                            className="text-slate-400 hover:text-green-600 transition-colors"
+                            title="Export Results"
+                          >
+                            <FileSpreadsheet size={18} />
+                          </button>
+                          <button
+                            onClick={() => deleteExam(exam.examId)}
+                            className="text-slate-400 hover:text-red-600 transition-colors"
+                            title="Delete Exam"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {sortedAnalytics.map((exam) => (
-                      <tr key={exam.examId} className="hover:bg-gray-50 transition">
-                        <td className="p-4 font-bold text-gray-700">{exam.title}</td>
-                        <td className="p-4 text-center text-gray-600">{exam.attempts}</td>
-                        <td className="p-4 text-center font-mono font-medium">{exam.attempts === 0 ? "—" : exam.avgScore}</td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                             <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                <div className={`h-full ${exam.passRate >= 60 ? 'bg-green-500' : exam.passRate >= 35 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{width: `${exam.passRate}%`}}></div>
-                             </div>
-                             <span className="text-xs font-bold">{exam.passRate}%</span>
-                          </div>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="flex justify-center gap-2">
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                              onClick={() => navigate(`/teacher/exams/${exam.examId}`)}
-                            >
-                              View
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition"
-                              onClick={() => exportResults(exam.examId)}
-                            >
-                              XLSX
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                              onClick={() => deleteExam(exam.examId)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* CHARTS SECTION */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 border-t bg-gray-50/30">
-                
-                {/* Bar Chart */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                  <h4 className="text-gray-800 font-bold mb-6 flex items-center gap-2">
-                    <span className="bg-blue-100 p-1 rounded text-blue-600">📊</span> Average Scores
-                  </h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={barChartData}>
-                      <XAxis dataKey="name" tick={{fontSize: 12}} interval={0} />
-                      <YAxis />
-                      <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                      <Bar dataKey="avgScore" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Pie Chart */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                  <h4 className="text-gray-800 font-bold mb-6 flex items-center gap-2">
-                    <span className="bg-purple-100 p-1 rounded text-purple-600">🍰</span> Overall Pass/Fail Ratio
-                  </h4>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={pieChartData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                      >
-                        {pieChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.name === "Passed" ? "#10B981" : "#EF4444"} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend verticalAlign="bottom" height={36}/>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </>
-          )}
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
-        {/* RECENT ACTIVITY */}
-        <RecentActivity activity={stats.recentActivity} />
+        {/* Analytics Section */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col p-6">
+          <div className="mb-6 flex items-center justify-between">
+            <h3 className="font-bold text-slate-900">Assessment Trends</h3>
+            <button className="text-slate-400 hover:text-slate-600 transition-colors">
+              <MoreVertical size={20} />
+            </button>
+          </div>
+
+          <div className="flex-1 flex flex-col justify-center min-h-[200px]">
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2463eb" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#2463eb" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Tooltip
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                />
+                <Area type="monotone" dataKey="avgScore" stroke="#2463eb" fillOpacity={1} fill="url(#colorScore)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <p className="text-sm text-slate-500 mb-2">Insight</p>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                Average score across all exams is <span className="text-blue-600 font-bold">{insights?.avgScore || 0}%</span>.
+                {insights?.hardestExam && (
+                  <> Hardest exam: <span className="font-bold text-red-500">{insights.hardestExam.title}</span>.</>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 
-const StatCard = ({ title, value, icon, color }) => {
-    const colorClasses = {
-        blue: "bg-blue-50 text-blue-600",
-        purple: "bg-purple-50 text-purple-600",
-        orange: "bg-orange-50 text-orange-600",
-        green: "bg-green-50 text-green-600",
-    };
+const StatCard = ({ title, value, icon, trend, trendUp, color, customIndicator, subtitle }) => {
+  const Icon = icon;
+  const colorClasses = {
+    blue: "bg-blue-50 text-blue-600",
+    purple: "bg-purple-50 text-purple-600",
+    amber: "bg-amber-50 text-amber-600",
+    green: "bg-green-50 text-green-600",
+  };
 
-    return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 transition hover:shadow-md">
-            <div className={`p-4 rounded-xl text-2xl ${colorClasses[color] || "bg-gray-100"}`}>
-                {icon}
-            </div>
-            <div>
-                <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">{title}</p>
-                <h3 className="text-3xl font-extrabold text-gray-800">{value}</h3>
-            </div>
+  return (
+    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          <Icon size={24} />
         </div>
-    );
+        {trend && (
+          <span className={`text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1 ${trendUp ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+            {trendUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+            {trend}
+          </span>
+        )}
+        {customIndicator}
+      </div>
+      <p className="text-slate-500 text-sm font-medium">{title}</p>
+      <div className="flex items-baseline gap-2 mt-1">
+        <p className="text-2xl font-bold text-slate-900">{value}</p>
+        {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
+      </div>
+    </div>
+  );
 };
-
-const RecentActivity = ({ activity }) => (
-  <div className="bg-white rounded-2xl shadow-sm border mt-10 overflow-hidden">
-    <div className="p-6 border-b bg-gray-50/50">
-      <h3 className="text-lg font-bold text-gray-800">Recent Submissions</h3>
-    </div>
-    <div className="max-h-[320px] overflow-y-auto">
-      {activity.length === 0 ? (
-        <div className="p-10 text-center text-gray-400 italic">
-          No recent activity... yet.
-        </div>
-      ) : (
-        activity.map((sub) => (
-          <div key={sub.id} className="p-5 flex justify-between items-center border-b last:border-b-0 hover:bg-gray-50 transition">
-            <div>
-                <p className="font-medium text-gray-800">{sub.student.name}</p>
-                <p className="text-sm text-gray-500">Submitted <span className="font-bold text-blue-600">{sub.exam.title}</span></p>
-            </div>
-            <div className={`px-4 py-2 rounded-lg font-bold text-sm ${sub.score / sub.totalScore >= 0.35 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-              {sub.score} / {sub.totalScore}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  </div>
-);

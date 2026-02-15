@@ -27,12 +27,12 @@ function App() {
             <Route path="/teacher-dashboard" element={<TeacherDashboard />} />
             <Route path="/student-dashboard" element={<StudentDashboard />} />
             <Route path="/create-exam" element={<CreateExam />} />
-            <Route path="/take-exam/:examId" element={<ExamView />} />
             <Route path="/exam-details/:examId" element={<DetailsView />} />
             <Route path="/student/result" element={<StudentResult />} />
             <Route path="/exam/review/:examId" element={<StudentReport />} />
             <Route path="/teacher/exams/:examId" element={<DetailsView />} />
           </Route>
+            <Route path="/take-exam/:examId" element={<ExamView />} />
           
           <Route path="*" element={<div className="p-10 text-center">404 - Page Not Found</div>} />
         </Routes>

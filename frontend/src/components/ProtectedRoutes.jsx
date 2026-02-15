@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
-import Navbar from "./Navbar";
+
 
 export default function ProtectedRoutes({ role }) {
     const token = localStorage.getItem("token");
@@ -15,13 +15,6 @@ export default function ProtectedRoutes({ role }) {
         return <Navigate to="/login" replace />;
     }
 
-    // 3. Render the Layout (Navbar + Child Route content)
-    return (
-        <>
-            <Navbar />
-            <main className="p-6">
-                <Outlet />
-            </main>
-        </>
-    );
+    // 3. Render the Outlet directly (Layouts handle their own structure)
+    return <Outlet />;
 }

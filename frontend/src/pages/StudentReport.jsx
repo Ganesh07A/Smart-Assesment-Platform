@@ -19,7 +19,7 @@ export default function StudentReport() {
                 });
                 setReport(res.data);
                 setLoading(false);
-            } catch (err) {
+            } catch {
                 toast.error("Failed to load report.");
                 navigate("/student-dashboard");
             }
@@ -34,9 +34,9 @@ export default function StudentReport() {
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
-            
+
             <div className="max-w-4xl mx-auto p-6">
-                
+
                 {/* 🏆 Score Card */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8 text-center relative overflow-hidden">
                     <div className={`absolute top-0 left-0 w-full h-3 ${isPassed ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -54,7 +54,7 @@ export default function StudentReport() {
                 <div className="space-y-6">
                     {report.reviewData.map((q, index) => (
                         <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            
+
                             {/* Question Header */}
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex gap-3">
@@ -71,13 +71,13 @@ export default function StudentReport() {
                             </div>
 
                             {/* --- CONTENT BASED ON TYPE --- */}
-                            
+
                             {q.type === "MCQ" ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {q.options.map((opt, optIndex) => {
                                         const correctIndex = Number(q.correctOption);
-                                        const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined) 
-                                            ? Number(q.selectedOption) 
+                                        const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined)
+                                            ? Number(q.selectedOption)
                                             : null;
 
                                         const isCorrect = optIndex === correctIndex;
@@ -115,7 +115,7 @@ export default function StudentReport() {
                         </div>
                     ))}
                 </div>
-                
+
                 <div className="mt-10 mb-10 text-center">
                     <button onClick={() => navigate("/student-dashboard")} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-black transition">
                         Back to Dashboard
