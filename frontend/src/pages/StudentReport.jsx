@@ -32,97 +32,198 @@ export default function StudentReport() {
     const percentage = Math.round((report.score / report.totalScore) * 100);
     const isPassed = percentage >= 35;
 
+    // Calculate accuracy (correct answers / total questions)
+    const totalQuestions = report.reviewData.length;
+    const correctAnswers = report.reviewData.filter(q => {
+        if (q.type === 'MCQ') {
+            return Number(q.selectedOption) === Number(q.correctOption);
+        }
+        return false; // Cannot automatically determine accuracy for code without backend flag, assuming false or N/A for now if not provided
+    }).length;
+    const accuracy = Math.round((correctAnswers / totalQuestions) * 100) || 0;
+
     return (
-        <div className="min-h-screen bg-gray-50 font-sans">
-
-            <div className="max-w-4xl mx-auto p-6">
-
-                {/* 🏆 Score Card */}
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8 text-center relative overflow-hidden">
-                    <div className={`absolute top-0 left-0 w-full h-3 ${isPassed ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    <h1 className="text-3xl font-extrabold text-gray-800">Exam Report</h1>
-                    <div className="flex justify-center items-center gap-4 mt-4">
-                        <span className="text-5xl font-black text-gray-800">{report.score}</span>
-                        <span className="text-xl text-gray-400 font-medium">/ {report.totalScore}</span>
+        <div className="bg-background-light text-slate-900 min-h-screen font-sans">
+            {/* Top Navigation Bar */}
+            <header className="sticky top-0 z-50 w-full bg-white border-b border-slate-200 px-6 py-3">
+                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-primary p-1.5 rounded-lg flex items-center justify-center text-white">
+                            <span className="material-symbols-outlined text-2xl">school</span>
+                        </div>
+                        <h1 className="text-xl font-bold tracking-tight text-slate-800">Smart Assessment</h1>
                     </div>
-                    <p className={`mt-2 font-bold ${isPassed ? "text-green-600" : "text-red-600"}`}>
-                        {isPassed ? "Pass 🎉" : "Fail 🛑"} ({percentage}%)
-                    </p>
+                    <div className="flex items-center gap-4">
+                        <div className="hidden md:flex flex-col items-end">
+                            <span className="text-sm font-bold text-slate-800">Student</span>
+                            <span className="text-xs text-slate-500">ID: N/A</span>
+                        </div>
+                        <div
+                            className="size-10 rounded-full border-2 border-primary/20 bg-cover bg-center"
+                            style={{ backgroundImage: "url('/assets/student-profile.jpg')" }}>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main className="max-w-5xl mx-auto px-6 py-10">
+                {/* Hero Section / Title */}
+                <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <nav className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                            <span className="cursor-pointer hover:text-primary" onClick={() => navigate("/student-dashboard")}>Dashboard</span>
+                            <span className="material-symbols-outlined text-xs">chevron_right</span>
+                            <span>My Results</span>
+                            <span className="material-symbols-outlined text-xs">chevron_right</span>
+                            <span className="text-primary font-medium">Exam Report</span>
+                        </nav>
+                        <h2 className="text-3xl font-black text-slate-900">Exam Result</h2>
+                        <p className="text-slate-500 mt-1">Completed recently</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-primary text-primary font-bold hover:bg-primary/5 transition-colors">
+                            <span className="material-symbols-outlined text-xl">picture_as_pdf</span>
+                            <span>Download PDF</span>
+                        </button>
+                    </div>
                 </div>
 
-                {/* 📝 Questions */}
-                <div className="space-y-6">
-                    {report.reviewData.map((q, index) => (
-                        <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-
-                            {/* Question Header */}
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex gap-3">
-                                    <span className="bg-gray-100 text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">
-                                        {index + 1}
-                                    </span>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-gray-800 pt-0.5 whitespace-pre-wrap">{q.text}</h3>
-                                        <span className={`text-xs px-2 py-0.5 rounded font-bold ${q.type === 'CODE' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                            {q.type === 'CODE' ? 'Code' : 'MCQ'}
-                                        </span>
-                                    </div>
+                {/* Score Summary Card */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-10 overflow-hidden relative">
+                    <div className={`absolute top-0 left-0 w-2 h-full ${isPassed ? 'bg-success' : 'bg-error'}`}></div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+                        <div className="flex flex-col items-center justify-center text-center space-y-4">
+                            <div className="relative size-40">
+                                {/* Progress Circle */}
+                                <svg className="size-full -rotate-90" viewBox="0 0 36 36">
+                                    <circle className="stroke-slate-100" cx="18" cy="18" fill="none" r="16" strokeWidth="3"></circle>
+                                    <circle className={`${isPassed ? 'stroke-success' : 'stroke-error'}`} cx="18" cy="18" fill="none" r="16" strokeDasharray={`${percentage} 100`} strokeLinecap="round" strokeWidth="3"></circle>
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-4xl font-black text-slate-900">{percentage}%</span>
+                                    <span className="text-xs uppercase tracking-widest font-bold text-slate-400">Overall</span>
                                 </div>
                             </div>
+                        </div>
+                        <div className="space-y-6">
+                            <div>
+                                <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total Score</p>
+                                <p className="text-5xl font-black text-slate-900">{report.score}<span className="text-2xl text-slate-400 font-medium">/{report.totalScore}</span></p>
+                            </div>
+                            <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border ${isPassed ? 'bg-success/10 text-success border-success/20' : 'bg-error/10 text-error border-error/20'}`}>
+                                <span className="material-symbols-outlined text-lg">{isPassed ? 'check_circle' : 'cancel'}</span>
+                                <span className="font-bold tracking-tight">Status: {isPassed ? 'Passed' : 'Failed'}</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 rounded-xl bg-background-light">
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Time Spent</p>
+                                <p className="text-xl font-bold text-slate-800">{report.timeSpent || "--"}</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-background-light">
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Accuracy</p>
+                                <p className="text-xl font-bold text-slate-800">{accuracy}%</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-background-light">
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Percentile</p>
+                                <p className="text-xl font-bold text-slate-800">{report.percentile ? `${report.percentile}th` : "--"}</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-background-light">
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Rank</p>
+                                <p className="text-xl font-bold text-slate-800">{report.rank ? `#${report.rank}` : "--"}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            {/* --- CONTENT BASED ON TYPE --- */}
+                {/* Detailed Breakdown Section */}
+                <div className="mb-6">
+                    <h3 className="text-xl font-bold text-slate-900 mb-4">Detailed Question Breakdown</h3>
+                    <div className="overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-500 uppercase text-[11px] font-bold tracking-widest">
+                                        <th className="px-6 py-4">#</th>
+                                        <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4">Question Details</th>
+                                        <th className="px-6 py-4">Your Answer</th>
+                                        <th className="px-6 py-4">Correct Answer</th>
+                                        <th className="px-6 py-4 text-right">Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {report.reviewData.map((q, index) => {
+                                        let isCorrect = false;
+                                        let yourAnswerDisplay = "";
+                                        let correctAnswerDisplay = "";
 
-                            {q.type === "MCQ" ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {q.options.map((opt, optIndex) => {
-                                        const correctIndex = Number(q.correctOption);
-                                        const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined)
-                                            ? Number(q.selectedOption)
-                                            : null;
-
-                                        const isCorrect = optIndex === correctIndex;
-                                        const isSelected = optIndex === selectedIndex;
-
-                                        let style = "border-gray-200 bg-white text-gray-500";
-                                        let icon = null;
-
-                                        if (isCorrect) {
-                                            style = "border-green-500 bg-green-50 text-green-700 ring-1 ring-green-200 font-bold";
-                                            icon = "✅";
-                                        } else if (isSelected) {
-                                            style = "border-red-500 bg-red-50 text-red-700 ring-1 ring-red-200 font-bold";
-                                            icon = "❌";
+                                        if (q.type === "MCQ") {
+                                            const correctIndex = Number(q.correctOption);
+                                            const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined)
+                                                ? Number(q.selectedOption)
+                                                : null;
+                                            isCorrect = (selectedIndex === correctIndex);
+                                            yourAnswerDisplay = (selectedIndex !== null && q.options[selectedIndex]) ? q.options[selectedIndex] : "Not Answered";
+                                            correctAnswerDisplay = q.options[correctIndex];
+                                        } else {
+                                            // For CODE, we might need manual grading logic or status from backend
+                                            // Assuming not correct by default unless we have a 'points' field in future
+                                            yourAnswerDisplay = "Code Submitted";
+                                            correctAnswerDisplay = "View Solution";
                                         }
 
                                         return (
-                                            <div key={optIndex} className={`p-4 rounded-xl border-2 flex justify-between items-center transition-all ${style}`}>
-                                                <span>{opt}</span>
-                                                <span>{icon}</span>
-                                            </div>
+                                            <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-6 py-4 text-sm font-medium text-slate-400">{String(index + 1).padStart(2, '0')}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`material-symbols-outlined ${isCorrect ? 'text-success' : 'text-error'} fill-current`}>
+                                                        {isCorrect ? 'check_circle' : 'cancel'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-sm font-semibold text-slate-800 line-clamp-1" title={q.text}>{q.text}</p>
+                                                </td>
+                                                <td className={`px-6 py-4 text-sm font-medium ${isCorrect ? 'text-success' : 'text-error'}`}>
+                                                    {q.type === "CODE" ? (
+                                                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">Code</span>
+                                                    ) : yourAnswerDisplay}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm font-medium text-slate-500">
+                                                    {q.type === "CODE" ? (
+                                                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">--</span>
+                                                    ) : correctAnswerDisplay}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm font-bold text-right text-slate-900">
+                                                    {q.type}
+                                                </td>
+                                            </tr>
                                         );
                                     })}
-                                </div>
-                            ) : (
-                                // --- CODING ANSWER DISPLAY ---
-                                <div className="bg-gray-900 rounded-xl p-4 overflow-hidden border border-gray-800">
-                                    <p className="text-xs text-gray-400 font-bold uppercase mb-2">Your Code Submission:</p>
-                                    <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap overflow-x-auto p-2">
-                                        {q.selectedOption || "// No code submitted"}
-                                    </pre>
-                                </div>
-                            )}
-
+                                </tbody>
+                            </table>
                         </div>
-                    ))}
+                    </div>
+                    <div className="mt-4 flex justify-center">
+                        <button onClick={() => navigate("/student-dashboard")} className="text-sm font-bold text-primary hover:underline">Back to Dashboard</button>
+                    </div>
                 </div>
-
-                <div className="mt-10 mb-10 text-center">
-                    <button onClick={() => navigate("/student-dashboard")} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-black transition">
-                        Back to Dashboard
-                    </button>
+            </main>
+            <footer className="mt-auto py-10 border-t border-slate-200 bg-white">
+                <div className="max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-primary/20 p-1 rounded">
+                            <span className="material-symbols-outlined text-primary text-sm">school</span>
+                        </div>
+                        <span className="text-sm font-bold text-slate-600">© 2024 Smart Assessment Platform</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                        <a className="text-sm text-slate-500 hover:text-primary transition-colors" href="#">Privacy Policy</a>
+                        <a className="text-sm text-slate-500 hover:text-primary transition-colors" href="#">Terms of Service</a>
+                        <a className="text-sm text-slate-500 hover:text-primary transition-colors" href="#">Support</a>
+                    </div>
                 </div>
-
-            </div>
+            </footer>
         </div>
     );
 }

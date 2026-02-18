@@ -51,7 +51,9 @@ export default function ExamView() {
 
                 setExam(examRes.data.exam);
                 setQuestions(qRes.data.questions || qRes.data);
-                setTimeLeft(examRes.data.exam.duration * 60);
+                // Ensure duration is a number
+                const duration = Number(examRes.data.exam.duration) || 60;
+                setTimeLeft(duration * 60);
                 setLoading(false);
             } catch {
                 toast.error("Failed to load exam.");
@@ -62,13 +64,13 @@ export default function ExamView() {
 
     // --- 2. TIMER ---
     useEffect(() => {
-        if (hasStarted) {
+        if (hasStarted && timeLeft > 0) {
             timerRef.current = setInterval(() => {
                 setTimeLeft((prev) => Math.max(0, prev - 1));
             }, 1000);
         }
         return () => clearInterval(timerRef.current);
-    }, [hasStarted]);
+    }, [hasStarted, timeLeft]);
 
     // --- 3. SUBMIT HANDLER ---
     const handleSubmit = useCallback(async (reason = "Normal Submission") => {
@@ -93,7 +95,8 @@ export default function ExamView() {
             if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
 
             toast.success(reason === "Auto-Submit" ? "Exam Auto-Submitted (Violations)" : "Exam Submitted Successfully!");
-            navigate(`/student/result`);
+            // Redirect to review page as requested
+            navigate(`/exam/review/${examId}`);
         } catch (err) {
             console.error(err);
             toast.error("Submission failed or already submitted.");

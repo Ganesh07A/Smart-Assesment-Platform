@@ -30,16 +30,16 @@ const DashboardLayout = ({ children, userName = "User", role = "teacher" }) => {
 
     const teacherNavItems = [
         { icon: LayoutDashboard, label: "Dashboard", path: "/teacher-dashboard" },
-        { icon: FileText, label: "Exams", path: "/teacher-dashboard" },
-        { icon: Users, label: "Students", path: "/student-dashboard" },
+        { icon: FileText, label: "Exams", path: "/exams" },
+        { icon: Users, label: "Students", path: "/students" },
         { icon: BarChart2, label: "Results", path: "/teacher-dashboard" },
         { icon: Settings, label: "Settings", path: "/teacher-dashboard" },
     ];
 
     const studentNavItems = [
         { icon: LayoutDashboard, label: "Dashboard", path: "/student-dashboard" },
-        { icon: FileText, label: "My Exams", path: "/student-dashboard" },
-        { icon: BarChart2, label: "Results", path: "/student-dashboard" },
+        { icon: FileText, label: "My Exams", path: "/my-exams" },
+        // { icon: BarChart2, label: "Results", path: "/student-dashboard" },
         { icon: TrendingUp, label: "Learning Path", path: "/student-dashboard" },
         { icon: Settings, label: "Settings", path: "/student-dashboard" },
         { icon: HelpCircle, label: "Help Center", path: "/student-dashboard" },

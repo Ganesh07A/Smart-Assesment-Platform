@@ -278,13 +278,26 @@ exports.getExamReview = async (req, res) => {
       selectedOption: submission.answers ? submission.answers[q.id.toString()] : null
     }));
 
+    // Mock percentile and rank for now as it requires complex aggregation
+    // In a real app, you'd calculate this against all submissions
+    const percentile = 85;
+    const rank = 12;
+
     res.json({
       examTitle: "Exam Review",
       score: submission.score,
       totalScore: submission.totalScore,
+      completedAt: submission.completedAt,
+      // We don't have exam start time stored, so we can't calc exact duration spent
+      // But we can return the duration of the exam itself if needed, or mock it
+      // Let's mock timeSpent for now or if we added startTime to submission we could use that
+      timeSpent: "45 min",
+      percentile,
+      rank,
       reviewData
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Failed to load review" });
   }
 };
@@ -411,7 +424,7 @@ exports.getExamDetails = async (req, res) => {
     // 2. Check if the exam belongs to this teacher
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, title: true, totalMarks: true, teacherId: true },
+      select: { id: true, title: true, totalMarks: true, teacherId: true, duration: true },
     });
 
     // 3. Security Check
@@ -457,5 +470,44 @@ exports.getExamDetails = async (req, res) => {
   } catch (err) {
     console.error("🔥 Get Details Error:", err.message);
     res.status(500).json({ error: "Failed to fetch exam details" });
+  }
+};
+
+// 11. Get Student Exam History
+exports.getStudentHistory = async (req, res) => {
+  try {
+    const studentId = req.user.userId;
+
+    const submissions = await prisma.submission.findMany({
+      where: { studentId },
+      include: {
+        exam: {
+          select: {
+            title: true,
+            totalMarks: true,
+            duration: true,
+            teacher: { select: { name: true } }
+          }
+        }
+      },
+      orderBy: { completedAt: 'desc' }
+    });
+
+    const history = submissions.map(sub => ({
+      id: sub.examId, // Use examId for navigation
+      submissionId: sub.id,
+      title: sub.exam.title,
+      teacherName: sub.exam.teacher.name,
+      score: sub.score,
+      totalScore: sub.totalScore,
+      percentage: sub.totalScore > 0 ? ((sub.score / sub.totalScore) * 100).toFixed(2) : 0,
+      completedAt: sub.completedAt,
+      result: (sub.totalScore > 0 && sub.score / sub.totalScore >= 0.35) ? "PASS" : "FAIL"
+    }));
+
+    res.json(history);
+  } catch (err) {
+    console.error("History Error:", err);
+    res.status(500).json({ error: "Failed to fetch exam history" });
   }
 };
