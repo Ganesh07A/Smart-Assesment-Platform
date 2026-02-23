@@ -36,6 +36,11 @@ exports.login = async (req, res) => {
     // 1. Only extract email and password (ignore role from frontend)
     const { email, password } = req.body;
 
+    // Check for missing fields
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
     console.log("---- LOGIN ATTEMPT ----");
     console.log("📥 Email:", email);
 
@@ -79,6 +84,10 @@ exports.login = async (req, res) => {
 
   } catch (err) {
     console.error("🔥 SERVER CRASH IN LOGIN:", err.message);
-    res.status(500).json({ error: "Server Error: " + err.message });
+    // Sanitize error message for the frontend to avoid "weird code" (technical details)
+    const errorMessage = err.message.includes("Prisma") || err.message.includes("SECRET_KEY")
+      ? "Internal Server Error. Please contact support."
+      : "Login Failed: " + err.message;
+    res.status(500).json({ error: errorMessage });
   }
 };

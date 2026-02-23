@@ -10,25 +10,31 @@ exports.createExam = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized: User not found." });
     }
 
-    const calculatedTotalMarks = questions ? questions.length : 0;
+    const totalMarks = parseInt(req.body.totalMarks) || questions.length;
+    const qCount = questions.length;
+
+    // Fair Marks Distribution Calculation
+    const marksPerQ = Math.floor(totalMarks / qCount);
+    const remainder = totalMarks % qCount;
 
     const newExam = await prisma.exam.create({
       data: {
         title,
         description,
         duration: parseInt(duration),
-        totalMarks: calculatedTotalMarks,
+        totalMarks: totalMarks, // Use the actual totalMarks from teacher
         teacher: {
           connect: { id: req.user.userId }
         },
         questions: {
-          create: questions.map((q) => ({
+          create: questions.map((q, index) => ({
             type: q.type || "MCQ",
             text: q.text,
             options: q.options || [],
             correctOption: q.type === "MCQ" ? parseInt(q.correctOption) : null,
             testCases: q.type === "CODE" ? q.testCases : [],
-            marks: parseInt(q.marks) || 1
+            // Assign calculated marks, adding remainder to the last question
+            marks: index === qCount - 1 ? (marksPerQ + remainder) : marksPerQ
           })),
         },
       },
@@ -131,7 +137,7 @@ exports.submitExam = async (req, res) => {
   try {
     console.log("📨 SUBMIT REQUEST RECEIVED");
 
-    const { examId, answers, tabSwitchCount, passedCases } = req.body;
+    const { examId, answers, tabSwitchCount, passedCases, timeSpent } = req.body;
     const studentId = req.user.userId;
 
     // A. Check duplicate
@@ -140,8 +146,12 @@ exports.submitExam = async (req, res) => {
     });
 
     if (existingSubmission) {
+      console.log(`⚠️ User ${studentId} already attempted Exam ${examId}`);
       return res.status(400).json({ error: "You have already taken this exam!" });
     }
+
+    console.log("📥 Raw passedCases from Frontend:", JSON.stringify(passedCases));
+    console.log("📥 Raw answers from Frontend:", JSON.stringify(answers));
 
     const questions = await prisma.question.findMany({
       where: { examId: parseInt(examId) },
@@ -175,6 +185,8 @@ exports.submitExam = async (req, res) => {
       else if (q.type === "CODE") {
         const isPassed = passedCases && (passedCases[q.id] === true || passedCases[String(q.id)] === true);
 
+        console.log(`Q${q.id} (CODE) | isPassed: ${isPassed} | passedCases key types:`, Object.keys(passedCases || {}).map(k => typeof k));
+
         if (isPassed) {
           score += q.marks;
           console.log(`✅ Q${q.id} (CODE) Passed! +${q.marks}`);
@@ -194,7 +206,12 @@ exports.submitExam = async (req, res) => {
         examId: parseInt(examId),
         studentId: studentId,
         tabSwitchCount: tabSwitchCount || 0,
-        answers: answers
+        timeSpent: parseInt(timeSpent) || 0,
+        // Store passedCases inside answers object so we can retrieve it for reviews
+        answers: {
+          ...answers,
+          _passedCases: passedCases || {}
+        }
       }
     });
 
@@ -267,35 +284,44 @@ exports.getExamReview = async (req, res) => {
       }
     });
 
-    const reviewData = questions.map((q) => ({
-      id: q.id,
-      type: q.type,
-      text: q.text,
-      options: q.options,
-      correctOption: q.correctOption,
-      testCases: q.testCases,
-      // Retrieve answer safely (works for int or string)
-      selectedOption: submission.answers ? submission.answers[q.id.toString()] : null
-    }));
+    const reviewData = questions.map((q) => {
+      const selectedOption = submission.answers ? submission.answers[q.id.toString()] : null;
+      const passedCases = submission.answers?._passedCases || {};
 
-    // Mock percentile and rank for now as it requires complex aggregation
-    // In a real app, you'd calculate this against all submissions
-    const percentile = 85;
-    const rank = 12;
+      let isCorrect = false;
+      if (q.type === "MCQ") {
+        isCorrect = selectedOption !== null && parseInt(selectedOption) === q.correctOption;
+      } else if (q.type === "CODE") {
+        isCorrect = passedCases[q.id] === true || passedCases[String(q.id)] === true;
+      }
 
-    res.json({
-      examTitle: "Exam Review",
-      score: submission.score,
-      totalScore: submission.totalScore,
-      completedAt: submission.completedAt,
-      // We don't have exam start time stored, so we can't calc exact duration spent
-      // But we can return the duration of the exam itself if needed, or mock it
-      // Let's mock timeSpent for now or if we added startTime to submission we could use that
-      timeSpent: "45 min",
-      percentile,
-      rank,
-      reviewData
+      return {
+        id: q.id,
+        type: q.type,
+        text: q.text,
+        options: q.options,
+        correctOption: q.correctOption,
+        testCases: q.testCases,
+        selectedOption,
+        isCorrect // Send the calculated status!
+      };
     });
+
+    // Format result for frontend display
+    const formattedResult = {
+      score: submission.score,
+      totalScore: submission.totalScore, // ADDED for frontend compatibility
+      totalMarks: submission.totalScore,
+      percentage: submission.totalScore > 0 ? ((submission.score / submission.totalScore) * 100).toFixed(1) : 0,
+      timeSpent: `${Math.floor(submission.timeSpent / 60)} min ${submission.timeSpent % 60} sec`,
+      accuracy: reviewData.filter(q => q.isCorrect).length,
+      totalQuestions: reviewData.length,
+      percentile: 85, // Mock value as before
+      rank: 12,       // Mock value as before
+      reviewData: reviewData
+    };
+
+    res.json(formattedResult);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load review" });
@@ -463,8 +489,17 @@ exports.getExamDetails = async (req, res) => {
       submittedAt: s.completedAt,
     }));
 
+    // 6. Final Response
     res.json({
-      exam: { title: exam.title, attempts, avgScore, passRate },
+      exam: {
+        id: exam.id,
+        title: exam.title,
+        duration: exam.duration,
+        totalMarks: exam.totalMarks,
+        attempts,
+        avgScore,
+        passRate: `${passCount}/${attempts}`
+      },
       submissions: formattedSubmissions,
     });
   } catch (err) {

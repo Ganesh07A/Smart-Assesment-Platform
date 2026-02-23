@@ -29,18 +29,14 @@ export default function StudentReport() {
 
     if (loading) return <div className="text-center mt-20 font-bold text-gray-500">Loading Report...</div>;
 
-    const percentage = Math.round((report.score / report.totalScore) * 100);
+    const totalScore = report.totalScore || report.totalMarks || 0;
+    const percentage = report.percentage !== undefined ? Math.round(report.percentage) : (totalScore > 0 ? Math.round((report.score / totalScore) * 100) : 0);
     const isPassed = percentage >= 35;
 
     // Calculate accuracy (correct answers / total questions)
     const totalQuestions = report.reviewData.length;
-    const correctAnswers = report.reviewData.filter(q => {
-        if (q.type === 'MCQ') {
-            return Number(q.selectedOption) === Number(q.correctOption);
-        }
-        return false; // Cannot automatically determine accuracy for code without backend flag, assuming false or N/A for now if not provided
-    }).length;
-    const accuracy = Math.round((correctAnswers / totalQuestions) * 100) || 0;
+    const correctAnswers = report.reviewData.filter(q => q.isCorrect).length;
+    const accuracy = report.accuracy !== undefined ? report.accuracy : (totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0);
 
     return (
         <div className="bg-background-light text-slate-900 min-h-screen font-sans">
@@ -108,7 +104,7 @@ export default function StudentReport() {
                         <div className="space-y-6">
                             <div>
                                 <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Total Score</p>
-                                <p className="text-5xl font-black text-slate-900">{report.score}<span className="text-2xl text-slate-400 font-medium">/{report.totalScore}</span></p>
+                                <p className="text-5xl font-black text-slate-900">{report.score}<span className="text-2xl text-slate-400 font-medium">/{report.totalScore || report.totalMarks}</span></p>
                             </div>
                             <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border ${isPassed ? 'bg-success/10 text-success border-success/20' : 'bg-error/10 text-error border-error/20'}`}>
                                 <span className="material-symbols-outlined text-lg">{isPassed ? 'check_circle' : 'cancel'}</span>
@@ -154,7 +150,7 @@ export default function StudentReport() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {report.reviewData.map((q, index) => {
-                                        let isCorrect = false;
+                                        const isCorrect = q.isCorrect;
                                         let yourAnswerDisplay = "";
                                         let correctAnswerDisplay = "";
 
@@ -163,12 +159,9 @@ export default function StudentReport() {
                                             const selectedIndex = (q.selectedOption !== null && q.selectedOption !== undefined)
                                                 ? Number(q.selectedOption)
                                                 : null;
-                                            isCorrect = (selectedIndex === correctIndex);
                                             yourAnswerDisplay = (selectedIndex !== null && q.options[selectedIndex]) ? q.options[selectedIndex] : "Not Answered";
                                             correctAnswerDisplay = q.options[correctIndex];
                                         } else {
-                                            // For CODE, we might need manual grading logic or status from backend
-                                            // Assuming not correct by default unless we have a 'points' field in future
                                             yourAnswerDisplay = "Code Submitted";
                                             correctAnswerDisplay = "View Solution";
                                         }
@@ -213,9 +206,9 @@ export default function StudentReport() {
                 <div className="max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                         <div className="bg-primary/20 p-1 rounded">
-                            <span className="material-symbols-outlined text-primary text-sm">school</span>
+                            <span className="material-symbols-outlined text-primary text-sm">college</span>
                         </div>
-                        <span className="text-sm font-bold text-slate-600">© 2024 Smart Assessment Platform</span>
+                        <span className="text-sm font-bold text-slate-600">© 2026 Smart Assessment Platform</span>
                     </div>
                     <div className="flex items-center gap-6">
                         <a className="text-sm text-slate-500 hover:text-primary transition-colors" href="#">Privacy Policy</a>
