@@ -1,4 +1,4 @@
-// server/prisma/schema.prisma
+// schema defination for smart assessment platform
 
 generator client {
   provider = "prisma-client-js"
@@ -22,13 +22,16 @@ model User {
 }
 
 model Exam {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  duration    Int      
-  totalMarks  Int
-  teacherId   Int
-  teacher     User     @relation(fields: [teacherId], references: [id])
+  id              Int      @id @default(autoincrement())
+  title           String
+  description     String?
+  startTime       DateTime @default(now())
+  endTime         DateTime @default(now())
+  duration        Int      
+  totalMarks      Int
+  negativeMarking Boolean  @default(false)
+  teacherId       Int
+  teacher         User     @relation(fields: [teacherId], references: [id])
    
   questions   Question[] 
   submissions Submission[] 

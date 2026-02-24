@@ -291,7 +291,7 @@ export default function TeacherDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {sortedAnalytics.map((exam) => (
+                  {sortedAnalytics.slice(0, 5).map((exam) => (
                     <tr key={exam.examId} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <p className="text-sm font-semibold text-slate-900">{exam.title}</p>

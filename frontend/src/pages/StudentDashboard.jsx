@@ -101,24 +101,46 @@ export default function StudentDashboard() {
                                     </div>
                                     <h4 className="text-base font-bold text-slate-900 mb-2 line-clamp-1" title={exam.title}>{exam.title}</h4>
 
-                                    <div className="space-y-2 mb-6">
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <Calendar size={14} />
-                                            <span className="text-xs font-medium">Available Now</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <Timer size={14} />
-                                            <span className="text-xs font-medium">{exam.duration} minutes</span>
-                                        </div>
-                                    </div>
+                                    {(() => {
+                                        const now = new Date();
+                                        const startTime = new Date(exam.startTime);
+                                        const endTime = new Date(exam.endTime);
+                                        const isStarted = now >= startTime;
+                                        const isEnded = now > endTime;
 
-                                    <button
-                                        onClick={() => navigate(`/take-exam/${exam.id}`)}
-                                        className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <Play size={18} fill="currentColor" />
-                                        Join Exam
-                                    </button>
+                                        return (
+                                            <>
+                                                <div className="space-y-2 mb-6">
+                                                    <div className={`flex items-center gap-2 ${exam.isAttempted ? "text-emerald-500" : (isStarted ? (isEnded ? "text-red-500" : "text-emerald-500") : "text-amber-500")}`}>
+                                                        <Calendar size={14} />
+                                                        <span className="text-xs font-bold uppercase tracking-wider">
+                                                            {exam.isAttempted ? "Attempted" : (isStarted ? (isEnded ? "Expired" : "Live Now") : "Coming Soon")}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-slate-500">
+                                                        <Timer size={14} />
+                                                        <span className="text-xs font-medium">{exam.duration} minutes</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 font-mono mt-1">
+                                                        {startTime.toLocaleDateString()} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {" - "}
+                                                        {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => navigate(`/take-exam/${exam.id}`)}
+                                                    disabled={!isStarted || isEnded || exam.isAttempted}
+                                                    className={`w-full font-bold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 ${!isStarted || isEnded || exam.isAttempted
+                                                        ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                                        : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20"
+                                                        }`}
+                                                >
+                                                    {exam.isAttempted ? "Completed" : (isEnded ? "Ended" : isStarted ? <><Play size={18} fill="currentColor" /> Join Exam</> : "Not Started")}
+                                                </button>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             ))}
 

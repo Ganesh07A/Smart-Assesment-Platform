@@ -32,7 +32,10 @@ export default function CreateExam() {
     description: "",
     duration: 30,
     totalMarks: 100,
-    passingScore: 40
+    passingScore: 40,
+    startTime: "",
+    endTime: "",
+    negativeMarking: false
   });
 
   const [questions, setQuestions] = useState([
@@ -304,6 +307,46 @@ export default function CreateExam() {
                   />
                 </div>
               </div>
+
+              {/* 🆕 Scheduled Window & Negative Marking */}
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 text-blue-600">Start Time</label>
+                  <input
+                    name="startTime"
+                    type="datetime-local"
+                    value={examData.startTime}
+                    onChange={handleExamChange}
+                    className="w-full h-12 px-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 text-red-600">End Time</label>
+                  <input
+                    name="endTime"
+                    type="datetime-local"
+                    value={examData.endTime}
+                    onChange={handleExamChange}
+                    className="w-full h-12 px-4 rounded-lg border-gray-200 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all outline-none border"
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-3 flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200 mt-6">
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-slate-900">Negative Marking</h4>
+                  <p className="text-xs text-slate-500">Enable to deduct 1 mark for each incorrect MCQ answer.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExamData({ ...examData, negativeMarking: !examData.negativeMarking })}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${examData.negativeMarking ? 'bg-red-500' : 'bg-slate-300'}`}
+                >
+                  <span
+                    className={`${examData.negativeMarking ? 'translate-x-6' : 'translate-x-1'} inline-block h-5 w-5 transform rounded-full bg-white transition-transform`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -312,7 +355,8 @@ export default function CreateExam() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <FileSpreadsheet className="text-blue-600" size={24} />
-            <h3 className="text-lg font-bold text-slate-900">Bulk Upload Questions</h3>
+            <h3 className="text-lg font-bold text-s
+            late-900">Bulk Upload Questions</h3>
           </div>
 
           <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group">

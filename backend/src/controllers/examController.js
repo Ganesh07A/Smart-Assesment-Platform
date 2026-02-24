@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 // 1. Create Exam
 exports.createExam = async (req, res) => {
   try {
-    const { title, description, duration, questions } = req.body;
+    const { title, description, duration, startTime, endTime, negativeMarking, questions } = req.body;
 
     if (!req.user || !req.user.userId) {
       return res.status(401).json({ error: "Unauthorized: User not found." });
@@ -22,6 +22,9 @@ exports.createExam = async (req, res) => {
         title,
         description,
         duration: parseInt(duration),
+        startTime: startTime ? new Date(startTime) : new Date(),
+        endTime: endTime ? new Date(endTime) : new Date(Date.now() + duration * 60000),
+        negativeMarking: !!negativeMarking,
         totalMarks: totalMarks, // Use the actual totalMarks from teacher
         teacher: {
           connect: { id: req.user.userId }
@@ -105,11 +108,39 @@ exports.getExamQuestions = async (req, res) => {
         title: true,
         description: true,
         duration: true,
-        totalMarks: true
+        totalMarks: true,
+        startTime: true,
+        endTime: true
       }
     });
 
     if (!exam) return res.status(404).json({ error: "Exam not found" });
+
+    // 🆕 Enforce Single Attempt
+    const studentId = req.user.userId;
+    const existingSubmission = await prisma.submission.findFirst({
+      where: { examId: examId, studentId: studentId }
+    });
+
+    if (existingSubmission) {
+      return res.status(403).json({ error: "You have already taken this exam!" });
+    }
+
+    // Enforce Time Window
+    const now = new Date();
+    if (now < exam.startTime) {
+      return res.status(403).json({ error: `Exam hasn't started yet. Starts at ${exam.startTime.toLocaleString()}` });
+    }
+    if (now > exam.endTime) {
+      return res.status(403).json({ error: "Exam session has ended." });
+    }
+
+    // Dynamic Duration Calculation: min(duration, timeLeft)
+    const timeLeftInSeconds = Math.floor((exam.endTime - now) / 1000);
+    const durationInSeconds = exam.duration * 60;
+    const adjustedDurationInSeconds = Math.min(durationInSeconds, timeLeftInSeconds);
+
+    exam.durationInSeconds = adjustedDurationInSeconds; // Send to frontend
 
     const questions = await prisma.question.findMany({
       where: { examId: examId },
@@ -157,6 +188,11 @@ exports.submitExam = async (req, res) => {
       where: { examId: parseInt(examId) },
     });
 
+    const exam = await prisma.exam.findUnique({
+      where: { id: parseInt(examId) },
+      select: { negativeMarking: true }
+    });
+
     let score = 0;
     let totalScore = 0;
 
@@ -177,6 +213,9 @@ exports.submitExam = async (req, res) => {
         if (userAnswer !== undefined && parseInt(userAnswer) === q.correctOption) {
           score += q.marks;
           console.log(`✅ Q${q.id} Correct! +${q.marks}`);
+        } else if (userAnswer !== undefined && exam.negativeMarking) {
+          score -= 1; // Always subtract 1 if negative marking is ON
+          console.log(`❌ Q${q.id} Wrong (Negative Marking)! -1`);
         } else {
           console.log(`❌ Q${q.id} Wrong.`);
         }
@@ -195,6 +234,9 @@ exports.submitExam = async (req, res) => {
         }
       }
     });
+
+    // Final score shouldn't be negative
+    if (score < 0) score = 0;
 
     console.log(`🏁 Final Score: ${score}/${totalScore}`);
 
@@ -450,7 +492,15 @@ exports.getExamDetails = async (req, res) => {
     // 2. Check if the exam belongs to this teacher
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { id: true, title: true, totalMarks: true, teacherId: true, duration: true },
+      select: {
+        id: true,
+        title: true,
+        totalMarks: true,
+        teacherId: true,
+        duration: true,
+        startTime: true,
+        endTime: true
+      },
     });
 
     // 3. Security Check

@@ -21,7 +21,10 @@ export default function ExamView() {
 
     // --- EXAM LOGIC ---
     const [currentQIndex, setCurrentQIndex] = useState(0);
-    const [answers, setAnswers] = useState({});
+    const [answers, setAnswers] = useState(() => {
+        const saved = localStorage.getItem(`exam_answers_${examId}`);
+        return saved ? JSON.parse(saved) : {};
+    });
     const [markedForReview, setMarkedForReview] = useState(new Set());
     const [timeLeft, setTimeLeft] = useState(0);
     const [testResults, setTestResults] = useState({});
@@ -56,13 +59,20 @@ export default function ExamView() {
                 });
 
                 setExam(examRes.data.exam);
-                setQuestions(qRes.data.questions || qRes.data);
+                setQuestions(qRes.data.questions);
 
-                // Use the duration from the API, fallback to 60 only if missing
-                const fetchedDuration = examRes.data.exam.duration;
-                const finalDuration = (fetchedDuration && fetchedDuration > 0) ? fetchedDuration : 60;
+                // 🆕 Use durationInSeconds from the questions response (which includes timing enforcement)
+                const examTiming = qRes.data.exam;
+                let finalTimeLeft = 0;
 
-                setTimeLeft(finalDuration * 60);
+                if (examTiming && examTiming.durationInSeconds !== undefined) {
+                    finalTimeLeft = examTiming.durationInSeconds;
+                } else {
+                    const fetchedDuration = (examTiming?.duration || examRes.data.exam.duration) || 60;
+                    finalTimeLeft = fetchedDuration * 60;
+                }
+
+                setTimeLeft(finalTimeLeft);
                 setLoading(false);
             } catch {
                 toast.error("Failed to load exam.");
@@ -99,6 +109,13 @@ export default function ExamView() {
         return () => clearInterval(timerRef.current);
     }, [hasStarted, timeLeft]);
 
+    // --- 🆕 AUTO-SAVE ---
+    useEffect(() => {
+        if (Object.keys(answers).length > 0) {
+            localStorage.setItem(`exam_answers_${examId}`, JSON.stringify(answers));
+        }
+    }, [answers, examId]);
+
     // --- 4. SUBMIT HANDLER ---
     const handleSubmit = useCallback(async (reason = "Normal Submission") => {
         if (isSubmittingRef.current) return;
@@ -125,6 +142,9 @@ export default function ExamView() {
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+
+            // 🆕 Clear Storage
+            localStorage.removeItem(`exam_answers_${examId}`);
 
             if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
 
@@ -172,6 +192,21 @@ export default function ExamView() {
             handleSubmit("Time Up");
         }
     }, [timeLeft, hasStarted, handleSubmit]);
+
+    // --- 🆕 HARD STOP: Submit if currentTime > exam.endTime ---
+    useEffect(() => {
+        if (!hasStarted || !exam?.endTime) return;
+
+        const checkInterval = setInterval(() => {
+            if (new Date() > new Date(exam.endTime)) {
+                console.log("⏰ End Time reached. Auto-submitting...");
+                handleSubmit("Session Ended");
+                clearInterval(checkInterval);
+            }
+        }, 5000);
+
+        return () => clearInterval(checkInterval);
+    }, [hasStarted, exam, handleSubmit]);
 
     // --- 6. LISTENERS ---
     useEffect(() => {
